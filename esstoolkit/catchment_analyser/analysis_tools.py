@@ -209,7 +209,7 @@ class ConcaveHull(object):
             return False
         return True
 
-    def point_in_polygon_q(self, point, list_of_points):
+    def point_in_polygon_q(self, point, list_of_points, touching = False):
         """
         Return True if given point *point* is laying in the polygon described by the vertices *list_of_points*,
         otherwise False
@@ -230,7 +230,7 @@ class ConcaveHull(object):
                     if x <= max(p1x, p2x):
                         if p1y != p2y:
                             xints = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
-                        if p1x == p2x or x <= xints:
+                        if p1x == p2x or (touching and x < xints) or (not touching and x <= xints):
                             inside = not inside
             p1x, p1y = p2x, p2y
 
@@ -463,7 +463,10 @@ class ConcaveHull(object):
 
         # check if all points are within the created polygon
         while (all_inside is True) and (i >= 0):
-            all_inside = self.point_in_polygon_q(point_set[i], hull)
+            # touching set to True, to make sure points that are ON the polygon are still considered 
+            # within. This is required to be on par with the other checks in this algorithm and it can
+            # happen when multiple boundary points fall onto a single line
+            all_inside = self.point_in_polygon_q(point_set[i], hull, True)
             i -= 1
 
         # since at least one point is out of the computed polygon, try again with a higher number of neighbors
