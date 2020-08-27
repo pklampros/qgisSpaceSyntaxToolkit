@@ -542,11 +542,14 @@ class AxialVerification(QThread):
                 self.axial_errors['invalid geometry'].append(fid)
                 self.problem_nodes.append(fid)
                 progress += steps
+                self.verificationProgress.emit(int(progress))
                 continue
             # geometry is valid (generally), skip rest of the checks
             if not geom.isGeosValid() or geom.isEmpty() or geom.isMultipart():
-                has_problem = True
                 self.axial_errors['invalid geometry'].append(fid)
+                self.problem_nodes.append(fid)
+                progress += steps
+                self.verificationProgress.emit(int(progress))
                 continue
             # geometry is polyline
             if len(geom.asPolyline()) > 2:
