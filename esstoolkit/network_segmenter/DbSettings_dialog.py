@@ -1,43 +1,39 @@
 # -*- coding: utf-8 -*-
-"""
-/***************************************************************************
- DbSettingsDialog
-                                 A QGIS plugin
- This is to load the postgis db settings
-                             -------------------
-        begin                : 2017-06-12
-        git sha              : $Format:%H$
-        copyright            : (C) 2017 by Ioanna Kolovou
-        email                : i.kolovou@spacesyntax.com
- ***************************************************************************/
 
-/***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- ***************************************************************************/
+# Space Syntax Toolkit
+# Set of tools for essential space syntax network analysis and results exploration
+# -------------------
+# begin                : 2017-06-12
+# copyright            : (C) 2017 by Space Syntax Ltd
+# author               : Ioanna Kolovou
+# email                : i.kolovou@spacesyntax.com
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+
+""" This is to load the postgis db settings
 """
-from __future__ import print_function
+
 from __future__ import absolute_import
+from __future__ import print_function
 
-from builtins import str
 import os
+from builtins import str
 
 from qgis.PyQt import QtWidgets, uic
 from qgis.PyQt.QtCore import pyqtSignal
-#from qgis.core import QgsDataSourceURI
 
-from .utilityFunctions import *
+from esstoolkit.utilities import db_helpers as dbh
+
+# from qgis.core import QgsDataSourceURI
 
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
     os.path.dirname(__file__), 'DbSettings_dialog_base.ui'))
 
 
 class DbSettingsDialog(QtWidgets.QDialog, FORM_CLASS):
-
     closingPlugin = pyqtSignal()
     setDbOutput = pyqtSignal()
 
@@ -59,7 +55,7 @@ class DbSettingsDialog(QtWidgets.QDialog, FORM_CLASS):
 
     def popDbs(self):
         self.dbCombo.clear()
-        self.dbCombo.addItems(['select db'] +sorted(self.available_dbs.keys()))
+        self.dbCombo.addItems(['select db'] + sorted(self.available_dbs.keys()))
         return
 
     def getSelectedDb(self):
@@ -83,7 +79,7 @@ class DbSettingsDialog(QtWidgets.QDialog, FORM_CLASS):
         selected_db = self.getSelectedDb()
         if len(self.getSelectedDb()) > 1:
             self.get_connstring(selected_db)
-            schemas = getPostgisSchemas(self.connstring)
+            schemas = dbh.getPostgisSchemas(self.connstring)
             # fix_print_with_import
             # fix_print_with_import
             print('connstring', self.connstring)

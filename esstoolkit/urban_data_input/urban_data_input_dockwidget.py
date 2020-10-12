@@ -1,39 +1,32 @@
 # -*- coding: utf-8 -*-
-"""
-/***************************************************************************
- UrbanDataInputDockWidget
-                                 A QGIS plugin
- Urban Data Input Tool for QGIS
-                             -------------------
-        begin                : 2016-06-03
-        git sha              : $Format:%H$
-        copyright            : (C) 2016 by Abhimanyu Acharya/(C) 2016 by Space Syntax Limited’.
-        email                : a.acharya@spacesyntax.com
- ***************************************************************************/
 
-/***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- ***************************************************************************/
-"""
+# Space Syntax Toolkit
+# Set of tools for essential space syntax network analysis and results exploration
+# -------------------
+# begin                : 2016-06-03
+# copyright            : (C) 2016 by Abhimanyu Acharya/(C) 2016 by Space Syntax Limited’.
+# author               : Abhimanyu Acharya
+# email                : a.acharya@spacesyntax.com
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+
 from __future__ import absolute_import
 
-from builtins import str
 import os
-from qgis.core import QgsProject
-from qgis.PyQt.QtCore import pyqtSignal
-from qgis.PyQt.QtWidgets import (QDockWidget, QTableWidgetItem)
-from qgis.PyQt.uic import loadUiType
+from builtins import str
 
-from . import utility_functions as uf
+from qgis.PyQt.QtCore import pyqtSignal
+from qgis.PyQt.QtWidgets import (QDockWidget, QTableWidgetItem, QHeaderView)
+from qgis.PyQt.uic import loadUiType
+from qgis.core import QgsProject
 
 from .CreateNew_Entrance_dialog import CreateNew_EntranceDialog
 from .CreateNew_LU_dialog import CreateNew_LUDialog
 from .CreateNew_dialog import CreatenewDialog
+from esstoolkit.utilities import layer_field_helpers as lfh
 
 FORM_CLASS, _ = loadUiType(os.path.join(
     os.path.dirname(__file__), 'urban_data_input_dockwidget_base.ui'))
@@ -165,7 +158,7 @@ class UrbanDataInputDockWidget(QDockWidget, FORM_CLASS):
 
     def updateFrontageSubTypes(self):
         frontage_sub_category_list_Building = ['Transparent', 'Semi Transparent', 'Blank']
-        frontage_sub_category_list_Fences = ['High Opaque Fence', 'High See Through Fence','Low Fence']
+        frontage_sub_category_list_Fences = ['High Opaque Fence', 'High See Through Fence', 'Low Fence']
         self.frontagessubcatlistWidget.clear()
         self.frontagessubcatlistWidget.addItems(frontage_sub_category_list_Building)
         self.frontagessubcatlistWidget.setCurrentRow(0)
@@ -190,7 +183,7 @@ class UrbanDataInputDockWidget(QDockWidget, FORM_CLASS):
     # Get building layer based on name
     def getSelectedLayerPushID(self):
         layer_name = self.pushIDcomboBox.currentText()
-        layer = uf.getLegendLayerByName(self.iface, layer_name)
+        layer = lfh.getLegendLayerByName(self.iface, layer_name)
         return layer
 
     def clearDataFields(self):
@@ -236,7 +229,6 @@ class UrbanDataInputDockWidget(QDockWidget, FORM_CLASS):
     def tableClear(self):
         self.tableWidgetFrontage.clear()
 
-
     #######
     #   Entrances
     #######
@@ -245,7 +237,7 @@ class UrbanDataInputDockWidget(QDockWidget, FORM_CLASS):
         self.ecategorylistWidget.clear()
         entrance_category_list = ['Controlled', 'Uncontrolled']
 
-        entrance_access_level_list = ["Lower Floor","Ground Floor","Upper Floor"]
+        entrance_access_level_list = ["Lower Floor", "Ground Floor", "Upper Floor"]
 
         self.ecategorylistWidget.addItems(entrance_category_list)
         self.eaccesscategorylistWidget.addItems(entrance_access_level_list)
@@ -315,20 +307,19 @@ class UrbanDataInputDockWidget(QDockWidget, FORM_CLASS):
     def entrancetableClear(self):
         self.tableWidgetEntrance.clear()
 
-
         #######
         #   Land Use
         #######
 
     def updateLUTypes(self):
         self.lucategorylistWidget.clear()
-        lu_category_list = ["Agriculture","Community","Catering",
-                            "Education","Government","Hotels",
-                            "Industry","Leisure","Medical",
-                            "Offices","Parking","Retail",
-                            "Residential","Services","Storage",
-                            "Transport","Utilities", "Under Construction",
-                            "Under Developed", "Unknown/Undefined","Vacant Building"]
+        lu_category_list = ["Agriculture", "Community", "Catering",
+                            "Education", "Government", "Hotels",
+                            "Industry", "Leisure", "Medical",
+                            "Offices", "Parking", "Retail",
+                            "Residential", "Services", "Storage",
+                            "Transport", "Utilities", "Under Construction",
+                            "Under Developed", "Unknown/Undefined", "Vacant Building"]
         lu_sub_category_list_empty = ["-"]
 
         self.lucategorylistWidget.addItems(lu_category_list)
@@ -336,14 +327,14 @@ class UrbanDataInputDockWidget(QDockWidget, FORM_CLASS):
 
     def updateLUsubcat(self):
 
-        lu_sub_category_list_catering = ["Restaurant and Cafes","Drinking Establishments",
+        lu_sub_category_list_catering = ["Restaurant and Cafes", "Drinking Establishments",
                                          "Hot Food Takeaways"]
-        lu_sub_category_list_leisure = ["Art and Culture","Amusement or Sports"]
-        lu_sub_category_list_medical = ["Hospitals","Health centres"]
-        lu_sub_category_list_parking = ["Car Parks","Other Vehicles"]
-        lu_sub_category_list_residential = ["Institutions","Dwellings"]
-        lu_sub_category_list_services = ["Commercial","Financial"]
-        lu_sub_category_list_transport = ["Transport Terminals","Goods Terminals"]
+        lu_sub_category_list_leisure = ["Art and Culture", "Amusement or Sports"]
+        lu_sub_category_list_medical = ["Hospitals", "Health centres"]
+        lu_sub_category_list_parking = ["Car Parks", "Other Vehicles"]
+        lu_sub_category_list_residential = ["Institutions", "Dwellings"]
+        lu_sub_category_list_services = ["Commercial", "Financial"]
+        lu_sub_category_list_transport = ["Transport Terminals", "Goods Terminals"]
         lu_sub_category_list_empty = ["-"]
 
         if self.lucategorylistWidget.currentRow() == 0:
@@ -451,7 +442,6 @@ class UrbanDataInputDockWidget(QDockWidget, FORM_CLASS):
             self.lusubcategorylistWidget.addItems(lu_sub_category_list_empty)
         self.lusubcategorylistWidget.setCurrentRow(0)
 
-
     # Set universal Entrance layer if conditions are satisfied
 
     def setLULayer(self):
@@ -485,7 +475,7 @@ class UrbanDataInputDockWidget(QDockWidget, FORM_CLASS):
         layer = self.setLULayer()
         if layer:
             dp = layer.dataProvider()
-            fieldlist = uf.getFieldNames(layer)
+            fieldlist = lfh.getFieldNames(layer)
             features = layer.selectedFeatures()
             attrs = []
             for feat in features:
@@ -550,7 +540,7 @@ class UrbanDataInputDockWidget(QDockWidget, FORM_CLASS):
 
     def clearLuTabledel(self):
         layer = self.dockwidget.setLULayer()
-        #layer.featureDeleted.connect(self.dockwidget.clearLUDataFields)
+        # layer.featureDeleted.connect(self.dockwidget.clearLUDataFields)
 
     def setLuFloors(self, value):
         self.spinBoxlufloors.setValue(int(value))

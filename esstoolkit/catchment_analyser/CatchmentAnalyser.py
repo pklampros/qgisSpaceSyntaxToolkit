@@ -1,43 +1,39 @@
 # -*- coding: utf-8 -*-
-"""
-/***************************************************************************
- CatchmentAnalyser
-                             Catchment Analyser
- Network based catchment analysis
-                              -------------------
-        begin                : 2016-05-19
-        author               : Laurens Versluis
-        copyright            : (C) 2016 by Space Syntax Limited
-        email                : l.versluis@spacesyntax.com
- ***************************************************************************/
 
-/***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- ***************************************************************************/
+# Space Syntax Toolkit
+# Set of tools for essential space syntax network analysis and results exploration
+# -------------------
+# begin                : 2016-05-19
+# copyright            : (C) 2016 by Space Syntax Limited
+# author               : Laurens Versluis
+# email                : l.versluis@spacesyntax.com
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+
+""" Network based catchment analysis
 """
-from __future__ import print_function
+
 from __future__ import absolute_import
+from __future__ import print_function
+
 from builtins import str
-from qgis.PyQt.QtCore import (QObject, QSettings, QVariant, QThread)
+
+from qgis.PyQt.QtCore import (QObject, QVariant, QThread)
 from qgis.PyQt.QtGui import QColor
-
 # Import QGIS classes
-from qgis.core import (QgsSymbol, QgsRendererRange, QgsGraduatedSymbolRenderer, QgsProject, QgsFillSymbol, QgsMessageLog, Qgis)
-import itertools, operator
+from qgis.core import (QgsSymbol, QgsRendererRange, QgsGraduatedSymbolRenderer, QgsProject, QgsFillSymbol,
+                       QgsMessageLog, Qgis)
 
-# Import the code for the dialog
-from .catchment_analyser_dialog import CatchmentAnalyserDialog
 # import the main analysis module
 from . import catchment_analysis as ca
-
 # Import utility tools
 from . import utility_functions as uf
-from .. import layer_field_helpers as lfh
+# Import the code for the dialog
+from .catchment_analyser_dialog import CatchmentAnalyserDialog
+from esstoolkit.utilities import db_helpers as dbh, layer_field_helpers as lfh
 
 
 class CatchmentTool(QObject):
@@ -47,7 +43,7 @@ class CatchmentTool(QObject):
 
         self.iface = iface
 
-        self.dlg = CatchmentAnalyserDialog(self.getQGISDbs())
+        self.dlg = CatchmentAnalyserDialog(dbh.getQGISDbs())
         self.analysis = None
         # Setup GUI signals
         self.dlg.networkCombo.activated.connect(self.updateCost)
@@ -79,23 +75,6 @@ class CatchmentTool(QObject):
         # Update layers
         self.updateLayers()
 
-    def getQGISDbs(self):
-        """Return all PostGIS connection settings stored in QGIS
-        :return: connection dict() with name and other settings
-                """
-        settings = QSettings()
-        settings.beginGroup('/PostgreSQL/connections')
-        named_dbs = settings.childGroups()
-        all_info = [i.split("/") + [str(settings.value(i))] for i in settings.allKeys() if
-                    settings.value(i) != NULL and settings.value(i) != '']
-        all_info = [i for i in all_info if
-                    i[0] in named_dbs and i[2] != NULL and i[1] in ['name', 'host', 'service', 'password', 'username',
-                                                                    'port', 'database']]
-        dbs = dict(
-            [k, dict([i[1:] for i in list(g)])] for k, g in itertools.groupby(sorted(all_info), operator.itemgetter(0)))
-        settings.endGroup()
-        return dbs
-
     def updateLayers(self):
         self.updateNetwork()
         self.updateOrigins()
@@ -114,7 +93,8 @@ class CatchmentTool(QObject):
 
     def updateCost(self):
         network = self.getNetwork()
-        self.dlg.setCostFields(uf.getNumericFieldNames(network))
+        txt, idxs = lfh.getNumericFieldNames(network)
+        self.dlg.setCostFields(txt)
 
     def updateName(self):
         origins = self.getOrigins()
@@ -143,11 +123,10 @@ class CatchmentTool(QObject):
             'catchment_network',
             'LINESTRING',
             epsg,
-            ['id',],
-            [QVariant.Int,]
+            ['id', ],
+            [QVariant.Int, ]
         )
         return output_network
-
 
     def tempPolygon(self, epsg):
         if self.dlg.polygonCheck.isChecked():
@@ -164,7 +143,7 @@ class CatchmentTool(QObject):
         # Gives warning according to message
         self.iface.messageBar().pushMessage(
             "Catchment Analyser: ",
-            "%s" % (message),
+            "%s" % message,
             level=Qgis.Warning,
             duration=5)
 
@@ -244,15 +223,18 @@ class CatchmentTool(QObject):
             output_network_features = output['output network features']
             # create layer
             new_fields = output_network_features[0].fields()
-            print(new_fields, self.settings['network'].crs(), self.settings['network'].dataProvider().encoding(), 'Linestring',self.settings['layer_type'], self.settings['output path'][0])
-            output_network = uf.to_layer(new_fields, self.settings['network'].crs(), self.settings['network'].dataProvider().encoding(), 'Linestring',
+            print(new_fields, self.settings['network'].crs(), self.settings['network'].dataProvider().encoding(),
+                  'Linestring', self.settings['layer_type'], self.settings['output path'][0])
+            output_network = uf.to_layer(new_fields, self.settings['network'].crs(),
+                                         self.settings['network'].dataProvider().encoding(), 'Linestring',
                                          self.settings['layer_type'], self.settings['output path'][0])
 
             output_network.dataProvider().addFeatures(output_network_features)
             output_polygon_features = output['output polygon features']
             if output_polygon_features and len(output_polygon_features) > 0:
                 new_fields = output_polygon_features[0].fields()
-                output_polygon = uf.to_layer(new_fields, self.settings['network'].crs(), self.settings['network'].dataProvider().encoding(),
+                output_polygon = uf.to_layer(new_fields, self.settings['network'].crs(),
+                                             self.settings['network'].dataProvider().encoding(),
                                              'Polygon', self.settings['layer_type'],
                                              self.settings['output path'][1])
 

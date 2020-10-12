@@ -1,35 +1,29 @@
 # -*- coding: utf-8 -*-
-"""
-/***************************************************************************
- UrbanDataInput
-                                 A QGIS plugin
- Urban Data Input Tool for QGIS
-                              -------------------
-        begin                : 2016-06-03
-        git sha              : $Format:%H$
-        copyright            : (C) 2016 by Abhimanyu Acharya/(C) 2016 by Space Syntax Limited’.
-        email                : a.acharya@spacesyntax.com
- ***************************************************************************/
 
-/***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- ***************************************************************************/
- """
+# Space Syntax Toolkit
+# Set of tools for essential space syntax network analysis and results exploration
+# -------------------
+# begin                : 2016-06-03
+# copyright            : (C) 2016 by Abhimanyu Acharya/(C) 2016 by Space Syntax Limited’.
+# author               : Abhimanyu Acharya
+# email                : a.acharya@spacesyntax.com
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+
 from __future__ import print_function
 
+import os
 # Import the PyQt and QGIS libraries
 from builtins import str
+
 from qgis.PyQt.QtCore import (QObject, QVariant)
-from qgis.core import (QgsProject, QgsVectorLayer, QgsField, QgsCoordinateReferenceSystem, QgsVectorFileWriter, QgsDataSourceUri, QgsVectorLayerExporter, QgsMessageLog)
+from qgis.core import (QgsProject, QgsVectorLayer, QgsField, QgsCoordinateReferenceSystem, QgsVectorFileWriter,
+                       QgsDataSourceUri, QgsVectorLayerExporter, QgsMessageLog, QgsMapLayer, Qgis)
 
-from . import utility_functions as uf
-
-import os
+from esstoolkit.utilities import layer_field_helpers as lfh
 
 
 class EntranceTool(QObject):
@@ -73,6 +67,14 @@ class EntranceTool(QObject):
         layer.commitChanges()
         layer.startEditing()
 
+    def isRequiredEntranceLayer(self, layer, type):
+        if layer.type() == QgsMapLayer.VectorLayer \
+                and layer.geometryType() == type:
+            if lfh.layerHasFields(layer, ['e_category', 'e_subcat']):
+                return True
+
+        return False
+
     # Add Frontage layer to combobox if conditions are satisfied
     def updateEntranceLayer(self):
         # disconnect any current entrance layer
@@ -82,7 +84,7 @@ class EntranceTool(QObject):
         layers = self.legend.values()
         type = 0
         for lyr in layers:
-            if uf.isRequiredEntranceLayer(self.iface, lyr, type):
+            if self.isRequiredEntranceLayer(lyr, type):
                 self.dockwidget.useExistingEntrancescomboBox.addItem(lyr.name(), lyr)
 
         if self.dockwidget.useExistingEntrancescomboBox.count() > 0:
@@ -97,12 +99,12 @@ class EntranceTool(QObject):
 
         provider = vl.dataProvider()
         provider.addAttributes([QgsField("e_id", QVariant.Int),
-                             QgsField("e_category", QVariant.String),
-                             QgsField("e_subcat", QVariant.String),
-                             QgsField("e_level", QVariant.Double)])
+                                QgsField("e_category", QVariant.String),
+                                QgsField("e_subcat", QVariant.String),
+                                QgsField("e_level", QVariant.Double)])
 
         vl.updateFields()
-        if self.entrancedlg.e_shp_radioButton.isChecked(): #layer_type == 'shapefile':
+        if self.entrancedlg.e_shp_radioButton.isChecked():  # layer_type == 'shapefile':
 
             path = self.entrancedlg.lineEditEntrances.text()
             if path and path != '':
@@ -110,7 +112,7 @@ class EntranceTool(QObject):
                 location = os.path.abspath(path)
                 crs = QgsCoordinateReferenceSystem()
                 crs.createFromSrid(3857)
-                QgsVectorFileWriter.writeAsVectorFormat(vl, location, "ogr", crs , "ESRI Shapefile")
+                QgsVectorFileWriter.writeAsVectorFormat(vl, location, "ogr", crs, "ESRI Shapefile")
                 vl = self.iface.addVectorLayer(location, filename[:-4], "ogr")
             else:
                 vl = 'invalid data source'
@@ -120,17 +122,18 @@ class EntranceTool(QObject):
             db_path = self.entrancedlg.lineEditEntrances.text()
             if db_path and db_path != '':
 
-                (database, schema, table_name) = (db_path).split(':')
+                (database, schema, table_name) = db_path.split(':')
                 db_con_info = self.entrancedlg.dbsettings_dlg.available_dbs[database]
                 uri = QgsDataSourceUri()
                 # passwords, usernames need to be empty if not provided or else connection will fail
                 if 'service' in list(db_con_info.keys()):
                     uri.setConnection(db_con_info['service'], '', '', '')
                 elif 'password' in list(db_con_info.keys()):
-                    uri.setConnection(db_con_info['host'], db_con_info['port'], db_con_info['dbname'], db_con_info['user'],
+                    uri.setConnection(db_con_info['host'], db_con_info['port'], db_con_info['dbname'],
+                                      db_con_info['user'],
                                       db_con_info['password'])
                 else:
-                    print(db_con_info) #db_con_info['host']
+                    print(db_con_info)  # db_con_info['host']
                     uri.setConnection('', db_con_info['port'], db_con_info['dbname'], '', '')
                 uri.setDataSource(schema, table_name, "geom")
                 error = QgsVectorLayerExporter.importLayer(vl, uri.uri(), "postgres", vl.crs(), False, False)
@@ -190,6 +193,7 @@ class EntranceTool(QObject):
             self.entrance_layer = None
 
             # Draw New Feature
+
     def logEntranceFeatureAdded(self, fid):
 
         QgsMessageLog.logMessage("feature added, id = " + str(fid))

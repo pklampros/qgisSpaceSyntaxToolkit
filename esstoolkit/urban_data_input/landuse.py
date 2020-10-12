@@ -1,59 +1,56 @@
 # -*- coding: utf-8 -*-
-"""
-/***************************************************************************
- UrbanDataInput
-                                 A QGIS plugin
- Urban Data Input Tool for QGIS
-                              -------------------
-        begin                : 2016-06-03
-        git sha              : $Format:%H$
-        copyright            : (C) 2016 by Abhimanyu Acharya/(C) 2016 by Space Syntax Limited’.
-        email                : a.acharya@spacesyntax.com
- ***************************************************************************/
 
-/***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- ***************************************************************************/
- """
+# Space Syntax Toolkit
+# Set of tools for essential space syntax network analysis and results exploration
+# -------------------
+# begin                : 2016-06-03
+# copyright            : (C) 2016 by Abhimanyu Acharya/(C) 2016 by Space Syntax Limited’.
+# author               : Abhimanyu Acharya
+# email                : a.acharya@spacesyntax.com
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+
 from __future__ import print_function
 
+import os
 # Import the PyQt and QGIS libraries
 from builtins import str
-import os
+
 from qgis.PyQt.QtCore import (QObject, QVariant)
-from qgis.core import (Qgis, QgsField, QgsProject, QgsMapLayer, QgsVectorLayer, QgsFeature, QgsVectorFileWriter, QgsDataSourceUri, QgsVectorLayerExporter, QgsMessageLog, QgsFeatureRequest)
-from . import utility_functions as uf
+from qgis.core import (Qgis, QgsField, QgsProject, QgsMapLayer, QgsVectorLayer, QgsFeature, QgsVectorFileWriter,
+                       QgsDataSourceUri, QgsVectorLayerExporter, QgsMessageLog, QgsFeatureRequest, NULL)
+
+from esstoolkit.utilities import layer_field_helpers as lfh
 
 is_debug = False
 
 ground_floor_attributes = [QgsField("lu_id", QVariant.Int),
-                                             QgsField("floors", QVariant.Int),
-                                             QgsField("area", QVariant.Double),
-                                             QgsField("gf_cat", QVariant.String),
-                                             QgsField("gf_subcat", QVariant.String),
-                                             QgsField("gf_ssx", QVariant.String),
-                                             QgsField("gf_nlud", QVariant.String),
-                                             QgsField("gf_tcpa", QVariant.String),
-                                             QgsField("gf_descrip", QVariant.String)]
+                           QgsField("floors", QVariant.Int),
+                           QgsField("area", QVariant.Double),
+                           QgsField("gf_cat", QVariant.String),
+                           QgsField("gf_subcat", QVariant.String),
+                           QgsField("gf_ssx", QVariant.String),
+                           QgsField("gf_nlud", QVariant.String),
+                           QgsField("gf_tcpa", QVariant.String),
+                           QgsField("gf_descrip", QVariant.String)]
 
 lower_floor_attributes = [QgsField("lf_cat", QVariant.String),
-                                             QgsField("lf_subcat", QVariant.String),
-                                             QgsField("lf_ssx", QVariant.String),
-                                             QgsField("lf_nlud", QVariant.String),
-                                             QgsField("lf_tcpa", QVariant.String),
-                                             QgsField("lf_descrip", QVariant.String)]
+                          QgsField("lf_subcat", QVariant.String),
+                          QgsField("lf_ssx", QVariant.String),
+                          QgsField("lf_nlud", QVariant.String),
+                          QgsField("lf_tcpa", QVariant.String),
+                          QgsField("lf_descrip", QVariant.String)]
 
 upper_floor_attributes = [QgsField("uf_cat", QVariant.String),
-                                            QgsField("uf_subcat", QVariant.String),
-                                            QgsField("uf_ssx", QVariant.String),
-                                            QgsField("uf_nlud", QVariant.String),
-                                            QgsField("uf_ntcpa", QVariant.String),
-                                            QgsField("uf_descrip", QVariant.String)]
+                          QgsField("uf_subcat", QVariant.String),
+                          QgsField("uf_ssx", QVariant.String),
+                          QgsField("uf_nlud", QVariant.String),
+                          QgsField("uf_ntcpa", QVariant.String),
+                          QgsField("uf_descrip", QVariant.String)]
+
 
 class LanduseTool(QObject):
 
@@ -84,7 +81,7 @@ class LanduseTool(QObject):
     #   Data functions
     #######
 
-# Add building layers from the legend to combobox in Create New file pop up dialogue
+    # Add building layers from the legend to combobox in Create New file pop up dialogue
     def updatebuildingLayers(self):
         self.ludlg.selectbuildingCombo.clear()
         layers = QgsProject.instance().mapLayers().values()
@@ -121,10 +118,10 @@ class LanduseTool(QObject):
 
     def getSelectedLULayer(self):
         layer_name = self.ludlg.selectbuildingCombo.currentText()
-        self.building_layer = uf.getLegendLayerByName(self.iface, layer_name)
+        self.building_layer = lfh.getLegendLayerByName(self.iface, layer_name)
         return self.building_layer
 
-# Update the F_ID column of the Frontage layer
+    # Update the F_ID column of the Frontage layer
     def updateIDLU(self):
         layer = self.dockwidget.setLULayer()
         features = layer.getFeatures()
@@ -137,7 +134,15 @@ class LanduseTool(QObject):
         layer.commitChanges()
         layer.startEditing()
 
-# Add Frontage layer to combobox if conditions are satisfied
+    def isRequiredLULayer(self, layer, type):
+        if layer.type() == QgsMapLayer.VectorLayer \
+                and layer.geometryType() == type:
+            if lfh.layerHasFields(layer, ['gf_cat', 'gf_subcat']):
+                return True
+
+        return False
+
+    # Add Frontage layer to combobox if conditions are satisfied
     def updateLULayer(self):
         self.disconnectLULayer()
         self.dockwidget.useExistingLUcomboBox.clear()
@@ -145,7 +150,7 @@ class LanduseTool(QObject):
         layers = self.legend.values()
         type = 2
         for lyr in layers:
-            if uf.isRequiredLULayer(self.iface, lyr, type):
+            if self.isRequiredLULayer(lyr, type):
                 self.dockwidget.useExistingLUcomboBox.addItem(lyr.name(), lyr)
 
         if self.dockwidget.useExistingLUcomboBox.count() > 0:
@@ -153,7 +158,7 @@ class LanduseTool(QObject):
             self.lu_layer = self.dockwidget.setLULayer()
             self.connectLULayer()
 
-# Create New Layer
+    # Create New Layer
     def newLULayer(self):
 
         if self.ludlg.LUincUFcheckBox.checkState() == 0 and self.ludlg.LUincLFcheckBox.checkState() == 0 and self.ludlg.LUincGFcheckBox.checkState() == 0:
@@ -171,9 +176,9 @@ class LanduseTool(QObject):
                 vl = QgsVectorLayer("Polygon?crs=" + crs.authid(), "memory:landuse", "memory")
             else:
                 # create memory layer
-                vl = QgsVectorLayer("Polygon?crs="  , "memory:landuse", "memory")
+                vl = QgsVectorLayer("Polygon?crs=", "memory:landuse", "memory")
             provider = vl.dataProvider()
-            #provider.addAttributes([])
+            # provider.addAttributes([])
 
             if self.ludlg.LUincGFcheckBox.checkState() == 2:
                 provider.addAttributes(ground_floor_attributes)
@@ -203,8 +208,7 @@ class LanduseTool(QObject):
                 if self.ludlg.LUincLFcheckBox.checkState() == 2:
                     provider.addAttributes(lower_floor_attributes)
                     self.dockwidget.LULowerfloorradioButton.setEnabled(1)
-                    null_attr += [ NULL, NULL, NULL, NULL, NULL, NULL]
-
+                    null_attr += [NULL, NULL, NULL, NULL, NULL, NULL]
 
                 if self.ludlg.LUincUFcheckBox.checkState() == 2:
                     provider.addAttributes(upper_floor_attributes)
@@ -224,7 +228,7 @@ class LanduseTool(QObject):
                 provider.addFeatures(new_feat_list)
                 vl.commitChanges()
 
-            if self.ludlg.lu_shp_radioButton.isChecked(): #layer_type == 'shapefile':
+            if self.ludlg.lu_shp_radioButton.isChecked():  # layer_type == 'shapefile':
 
                 path = self.ludlg.lineEditLU.text()
 
@@ -243,17 +247,17 @@ class LanduseTool(QObject):
 
                 db_path = self.ludlg.lineEditLU.text()
                 if db_path and db_path != '':
-                    (database, schema, table_name) = (db_path).split(':')
+                    (database, schema, table_name) = db_path.split(':')
                     db_con_info = self.ludlg.dbsettings_dlg.available_dbs[database]
                     uri = QgsDataSourceUri()
                     # passwords, usernames need to be empty if not provided or else connection will fail
                     if 'service' in list(db_con_info.keys()):
-                        uri.setConnection(db_con_info['service'], '' , '', '')
+                        uri.setConnection(db_con_info['service'], '', '', '')
                     elif 'password' in list(db_con_info.keys()):
                         uri.setConnection(db_con_info['host'], db_con_info['port'], db_con_info['dbname'],
                                           db_con_info['user'], db_con_info['password'])
                     else:
-                        print(db_con_info) #db_con_info['host']
+                        print(db_con_info)  # db_con_info['host']
                         uri.setConnection('', db_con_info['port'], db_con_info['dbname'], '', '')
                     uri.setDataSource(schema, table_name, "geom")
                     error = QgsVectorLayerExporter.importLayer(vl, uri.uri(), "postgres", vl.crs(), False, False)
@@ -291,8 +295,7 @@ class LanduseTool(QObject):
         self.ludlg.closePopUpLU()
         self.ludlg.lineEditLU.clear()
 
-
-# Set layer as frontage layer and apply thematic style
+    # Set layer as frontage layer and apply thematic style
     def loadLULayer(self):
         # disconnect any current frontage layer
         self.disconnectLULayer()
@@ -317,7 +320,7 @@ class LanduseTool(QObject):
             self.lu_layer.featureDeleted.disconnect(self.dockwidget.clearLUDataFields)
             self.lu_layer = None
 
-     # Draw New Feature
+    # Draw New Feature
     def logLUFeatureAdded(self, fid):
 
         if is_debug:
@@ -397,10 +400,10 @@ class LanduseTool(QObject):
 
         v_layer.updateFields()
         # lets let the user decide when to change these fields
-        #self.dockwidget.setLufloors(0)
-        #self.dockwidget.LUtextedit.clear()
+        # self.dockwidget.setLufloors(0)
+        # self.dockwidget.LUtextedit.clear()
 
-# Update Feature
+    # Update Feature
     def updateSelectedLUAttribute(self):
         mc = self.canvas
         layer = self.dockwidget.setLULayer()
@@ -447,5 +450,5 @@ class LanduseTool(QObject):
 
         self.dockwidget.addLUDataFields()
         # lets let the user decide when to change these fields
-        #self.dockwidget.setLufloors(0)
-        #self.dockwidget.LUtextedit.clear()
+        # self.dockwidget.setLufloors(0)
+        # self.dockwidget.LUtextedit.clear()

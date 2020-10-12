@@ -1,35 +1,31 @@
 # -*- coding: utf-8 -*-
-"""
-/***************************************************************************
- UrbanDataInput
-                                 A QGIS plugin
- Urban Data Input Tool for QGIS
-                              -------------------
-        begin                : 2016-06-03
-        git sha              : $Format:%H$
-        copyright            : (C) 2016 by Abhimanyu Acharya/(C) 2016 by Space Syntax Limited’.
-        email                : a.acharya@spacesyntax.com
- ***************************************************************************/
 
-/***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- ***************************************************************************/
- """
+# Space Syntax Toolkit
+# Set of tools for essential space syntax network analysis and results exploration
+# -------------------
+# begin                : 2016-06-03
+# copyright            : (C) 2016 by Abhimanyu Acharya/(C) 2016 by Space Syntax Limited’.
+# author               : Abhimanyu Acharya
+# email                : a.acharya@spacesyntax.com
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+
 from __future__ import print_function
 
+import os
 # Import the PyQt and QGIS libraries
 from builtins import str
 from builtins import zip
-import os
+
 from qgis.PyQt.QtCore import (QObject, QVariant)
-from qgis.core import (QgsProject, QgsMapLayer, QgsVectorLayer, QgsField, QgsFeature, QgsGeometry, QgsVectorFileWriter, QgsDataSourceUri, QgsVectorLayerExporter, QgsMessageLog, QgsFeatureRequest, QgsVectorDataProvider)
-import processing
-from . import utility_functions as uf
+from qgis.core import (QgsProject, QgsMapLayer, QgsVectorLayer, QgsField, QgsFeature, QgsGeometry, QgsVectorFileWriter,
+                       QgsDataSourceUri, QgsVectorLayerExporter, QgsMessageLog, QgsFeatureRequest,
+                       QgsVectorDataProvider, NULL, QgsWkbTypes, Qgis)
+
+from esstoolkit.utilities import layer_field_helpers as lfh
 
 
 class FrontageTool(QObject):
@@ -76,6 +72,14 @@ class FrontageTool(QObject):
         layer.commitChanges()
         layer.startEditing()
 
+    def isRequiredLayer(self, layer, type):
+        if layer.type() == QgsMapLayer.VectorLayer \
+                and layer.geometryType() == type:
+            if lfh.layerHasFields(layer, ['f_group', 'f_type']):
+                return True
+
+        return False
+
     # Add Frontage layer to combobox if conditions are satisfied
     def updateFrontageLayer(self):
         self.dockwidget.useExistingcomboBox.clear()
@@ -84,7 +88,7 @@ class FrontageTool(QObject):
         layers = self.legend.values()
         type = 1
         for lyr in layers:
-            if uf.isRequiredLayer(self.iface, lyr, type):
+            if self.isRequiredLayer(lyr, type):
                 self.dockwidget.useExistingcomboBox.addItem(lyr.name(), lyr)
 
         if self.dockwidget.useExistingcomboBox.count() > 0:
@@ -130,7 +134,7 @@ class FrontageTool(QObject):
     # Get building layer selected in the combo box
     def getSelectedLayer(self):
         layer_name = self.frontagedlg.selectLUCombo.currentText()
-        self.LU_layer = uf.getLegendLayerByName(self.iface, layer_name)
+        self.LU_layer = lfh.getLegendLayerByName(self.iface, layer_name)
         return self.LU_layer
 
     # Set layer as frontage layer and apply thematic style
@@ -183,7 +187,7 @@ class FrontageTool(QObject):
             exploded_features = []
             i = 1
             for f in building_layer.getFeatures():
-                points = f.geometry().asPolygon()[0] # get list of points
+                points = f.geometry().asPolygon()[0]  # get list of points
                 for (p1, p2) in zip(points[:-1], points[1:]):
                     i += 1
                     feat = QgsFeature()
@@ -199,7 +203,7 @@ class FrontageTool(QObject):
             vl.commitChanges()
             print('building layer3')
 
-        if self.frontagedlg.f_shp_radioButton.isChecked(): #layer_type == 'shapefile':
+        if self.frontagedlg.f_shp_radioButton.isChecked():  # layer_type == 'shapefile':
 
             path = self.frontagedlg.lineEditFrontages.text()
 
@@ -217,18 +221,19 @@ class FrontageTool(QObject):
             db_path = self.frontagedlg.lineEditFrontages.text()
             if db_path and db_path != '':
 
-
                 (database, schema, table_name) = (self.frontagedlg.lineEditFrontages.text()).split(':')
                 db_con_info = self.frontagedlg.dbsettings_dlg.available_dbs[database]
                 uri = QgsDataSourceUri()
                 # passwords, usernames need to be empty if not provided or else connection will fail
                 if 'service' in list(db_con_info.keys()):
-                    uri.setConnection(db_con_info['service'], '' , '', '') #db_con_info['dbname']
-                elif 'password'in list(db_con_info.keys()):
-                    uri.setConnection(db_con_info['host'], db_con_info['port'], db_con_info['dbname'], db_con_info['user'], db_con_info['password'])
+                    uri.setConnection(db_con_info['service'], '', '', '')  # db_con_info['dbname']
+                elif 'password' in list(db_con_info.keys()):
+                    uri.setConnection(db_con_info['host'], db_con_info['port'], db_con_info['dbname'],
+                                      db_con_info['user'], db_con_info['password'])
                 else:
-                    print(db_con_info) #db_con_info['host']
-                    uri.setConnection('', db_con_info['port'], db_con_info['dbname'], '', '' )# , db_con_info['user'], '')
+                    print(db_con_info)  # db_con_info['host']
+                    uri.setConnection('', db_con_info['port'], db_con_info['dbname'], '',
+                                      '')  # , db_con_info['user'], '')
                 uri.setDataSource(schema, table_name, "geom")
                 error = QgsVectorLayerExporter.importLayer(vl, uri.uri(), "postgres", vl.crs(), False, False)
                 if error[0] != 0:
@@ -258,10 +263,10 @@ class FrontageTool(QObject):
             msg = msgBar.createMessage(u'Frontages layer created!')
             msgBar.pushWidget(msg, Qgis.Info, 10)
             vl.startEditing()
-            if uf.isRequiredLayer(self.iface, vl, type):
+            if self.isRequiredLayer(self.iface, vl, type):
                 self.dockwidget.useExistingcomboBox.addItem(vl.name(), vl)
 
-        #self.updateFrontageLayer() This is creating problems with signals - REMOVE
+        # self.updateFrontageLayer() This is creating problems with signals - REMOVE
 
         # TODO: updateLength function should receive a layer as input. It would be used earlier
         self.frontagedlg.closePopUp()
@@ -361,7 +366,7 @@ class FrontageTool(QObject):
         frontlayer.startEditing()
 
         buildingID = self.dockwidget.pushIDlistWidget.currentItem().text()
-        #print buildingID
+        # print buildingID
         newColumn = "b_" + buildingID
         frontlayer_pr = frontlayer.dataProvider()
         frontlayer_pr.addAttributes([QgsField(newColumn, QVariant.Int)])
@@ -371,7 +376,7 @@ class FrontageTool(QObject):
 
         for buildfeat in buildinglayer.getFeatures():
             for frontfeat in frontlayer.getFeatures():
-                if frontfeat.geometry().intersects(buildfeat.geometry()) == True:
+                if frontfeat.geometry().intersects(buildfeat.geometry()):
                     frontlayer.startEditing()
 
                     if frontlayer_caps & QgsVectorDataProvider.ChangeAttributeValues:

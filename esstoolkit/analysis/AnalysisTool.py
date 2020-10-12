@@ -1,47 +1,36 @@
 # -*- coding: utf-8 -*-
-"""
-/***************************************************************************
- essToolkit
-                            Space Syntax Toolkit
- Set of tools for essential space syntax network analysis and results exploration
-                              -------------------
-        begin                : 2014-04-01
-        copyright            : (C) 2015, UCL
-        author               : Jorge Gil
-        email                : jorge.gil@ucl.ac.uk
- ***************************************************************************/
 
-/***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- ***************************************************************************/
+# Space Syntax Toolkit
+# Set of tools for essential space syntax network analysis and results exploration
+# -------------------
+# begin                : 2014-04-01
+# copyright            : (C) 2015 by Jorge Gil, UCL
+# author               : Jorge Gil
+# email                : jorge.gil@ucl.ac.uk
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
 
-"""
 from __future__ import absolute_import
-# Import the PyQt and QGIS libraries
-from builtins import str
-from qgis.PyQt.QtCore import QTimer
-from qgis.PyQt.QtWidgets import QMessageBox
-from qgis.core import (QgsProject, QgsWkbTypes, QgsVectorDataProvider)
 
+import datetime
+import os.path
+
+# Import the PyQt and QGIS libraries
+from qgis.PyQt.QtCore import (QObject, QTimer, pyqtSignal, QVariant)
+from qgis.PyQt.QtWidgets import QMessageBox
+from qgis.core import (QgsProject, QgsVectorDataProvider, Qgis, QgsWkbTypes)
+
+from esstoolkit.utilities import shapefile_helpers as shph, layer_field_helpers as lfh, db_helpers as dbh
 # Import required modules
 from .AnalysisDialog import AnalysisDialog
-from .AxialVerification import *
-from .UnlinksVerification import *
-from .DepthmapAnalysis import *
-
-from .. import utility_functions as uf
-from .. import layer_field_helpers as lfh
-from .. import shapefile_helpers as shph
-
-import socket
-import datetime
-import select
-import os.path
+from .AnalysisEngine import AnalysisEngine
+from .AxialVerification import AxialVerification
+from .DepthmapEngine import DepthmapEngine
+from .DepthmapNetEngine import DepthmapNetEngine
+from .UnlinksVerification import UnlinksVerification, UnlinksIdUpdate
 
 
 class AnalysisTool(QObject):
@@ -54,6 +43,8 @@ class AnalysisTool(QObject):
         self.settings = settings
         self.project = project
         self.legend = QgsProject.instance().mapLayers()
+        self.analysis_engine = DepthmapNetEngine(self.iface)
+        self.running_analysis = ''
 
     def load(self):
         # initialise UI
@@ -61,7 +52,6 @@ class AnalysisTool(QObject):
 
         # initialise axial analysis classes
         self.verificationThread = None
-        self.depthmapAnalysis = DepthmapAnalysis(self.iface)
 
         # connect signal/slots with main program
         self.project.settingsUpdated.connect(self.setDatastore)
@@ -75,8 +65,8 @@ class AnalysisTool(QObject):
         self.dlg.axialUpdateButton.clicked.connect(self.runAxialUpdate)
         self.dlg.axialVerifyCancelButton.clicked.connect(self.cancelAxialVerification)
         self.dlg.axialReportList.itemSelectionChanged.connect(self.zoomAxialProblem)
-        self.dlg.axialDepthmapCalculateButton.clicked.connect(self.runDepthmapAnalysis)
-        self.dlg.axialDepthmapCancelButton.clicked.connect(self.cancelDepthmapAnalysis)
+        self.dlg.axialDepthmapCalculateButton.clicked.connect(self.run_analysis)
+        self.dlg.axialDepthmapCancelButton.clicked.connect(self.cancel_analysis)
 
         # initialise internal globals
         self.isVisible = False
@@ -91,7 +81,7 @@ class AnalysisTool(QObject):
 
         # timer to check for analysis result
         self.timer = QTimer()
-        self.timer.timeout.connect(self.checkDepthmapAnalysisProgress)
+        self.timer.timeout.connect(self.check_analysis_progress)
 
         # define analysis data structures
         self.analysis_layers = {'map': "", 'unlinks': "", 'map_type': 0}
@@ -144,14 +134,14 @@ class AnalysisTool(QObject):
         self.dlg.clearAxialProblems(0)
         self.dlg.clearAxialProblems(1)
         # update graph analysis
-        self.dlg.setAxialDepthmapTab(self.axial_analysis_settings)
+        self.dlg.set_axial_depthmap_tab(self.axial_analysis_settings)
 
     def updateProjectSettings(self):
         self.project.writeSettings(self.analysis_layers, "analysis")
         self.project.writeSettings(self.axial_analysis_settings, "depthmap")
 
     def changeDatastore(self):
-        #signal from UI if data store button is clicked
+        # signal from UI if data store button is clicked
         self.editDatastoreSettings.emit()
 
     def updateDatastore(self, name):
@@ -188,7 +178,7 @@ class AnalysisTool(QObject):
                 new_datastore['type'] = 0
                 new_datastore['path'] = lfh.getLayerPath(layer)
                 new_datastore['name'] = os.path.basename(new_datastore['path'])
-            if new_datastore['type'] in (0,1,2):
+            if new_datastore['type'] in (0, 1, 2):
                 self.project.writeSettings(new_datastore, 'datastore')
                 self.setDatastore()
             else:
@@ -220,11 +210,12 @@ class AnalysisTool(QObject):
             elif self.datastore['type'] == 1 and os.path.exists(self.datastore['path']):
                 sl_connections = dbh.listSpatialiteConnections()
                 if len(sl_connections) > 0:
-                    if self.datastore['name'] in sl_connections['name'] and self.datastore['path'] == sl_connections['path'][sl_connections['name'].index(self.datastore['name'])]:
+                    if self.datastore['name'] in sl_connections['name'] and self.datastore['path'] == \
+                            sl_connections['path'][sl_connections['name'].index(self.datastore['name'])]:
                         txt = 'SL: %s' % self.datastore['name']
                         path = self.datastore['path']
                 else:
-                    dbh.createSpatialiteConnection(self.datastore['name'],self.datastore['path'])
+                    dbh.createSpatialiteConnection(self.datastore['name'], self.datastore['path'])
                     txt = 'SL: %s' % self.datastore['name']
                     path = self.datastore['path']
             # postgis data store
@@ -242,22 +233,28 @@ class AnalysisTool(QObject):
             schema = self.datastore['schema']
             if name == "":
                 self.clearDatastore()
-                self.iface.messageBar().pushMessage("Info", "Select a 'Data store' to save analysis results.", level=0, duration=5)
+                self.iface.messageBar().pushMessage("Info", "Select a 'Data store' to save analysis results.", level=0,
+                                                    duration=5)
             elif self.datastore['type'] == 0 and not os.path.exists(path):
                 is_set = False
-            elif self.datastore['type'] == 1 and (name not in dbh.listSpatialiteConnections()['name'] or not os.path.exists(path)):
+            elif self.datastore['type'] == 1 and (
+                    name not in dbh.listSpatialiteConnections()['name'] or not os.path.exists(path)):
                 is_set = False
-            elif self.datastore['type'] == 2 and (name not in dbh.listPostgisConnectionNames() or schema not in dbh.listPostgisSchemas(dbh.getPostgisConnection(name))):
+            elif self.datastore['type'] == 2 and (
+                    name not in dbh.listPostgisConnectionNames() or schema not in dbh.listPostgisSchemas(
+                dbh.getPostgisConnection(name))):
                 is_set = False
             else:
                 is_set = True
-           # clear whatever data store settings are saved
+            # clear whatever data store settings are saved
             if not is_set:
                 self.clearDatastore()
-                self.iface.messageBar().pushMessage("Info", "The selected data store cannot be found.", level=0, duration=5)
+                self.iface.messageBar().pushMessage("Info", "The selected data store cannot be found.", level=0,
+                                                    duration=5)
         else:
             self.clearDatastore()
-            self.iface.messageBar().pushMessage("Info", "Select a 'Data store' to save analysis results.", level=0, duration=5)
+            self.iface.messageBar().pushMessage("Info", "Select a 'Data store' to save analysis results.", level=0,
+                                                duration=5)
         return is_set
 
     ##
@@ -279,7 +276,7 @@ class AnalysisTool(QObject):
                 # checks if the layer is projected. Geographic coordinates are not supported
                 if layer.isSpatial() and lfh.isLayerProjected(layer):
                     unlinks_list.append(layer.name())
-                    if layer.geometryType() == 1: # line geometry
+                    if layer.geometryType() == 1:  # line geometry
                         map_list.append(layer.name())
             # settings preference
             if self.analysis_layers['map'] in map_list:
@@ -295,13 +292,13 @@ class AnalysisTool(QObject):
             if selected_layers['unlinks'] != '' and selected_layers['unlinks'] in unlinks_list:
                 analysis_unlinks = unlinks_list.index(selected_layers['unlinks'])
         else:
-            self.dlg.clearAxialDepthmapTab()
+            self.dlg.clear_analysis_tab()
 
         # update UI
-        self.dlg.setMapLayers(map_list, analysis_map, map_type)
-        self.dlg.setUnlinksLayers(unlinks_list, analysis_unlinks)
-        self.dlg.updateAnalysisTabs()
-        self.dlg.updateAxialDepthmapTab()
+        self.dlg.set_map_layers(map_list, analysis_map, map_type)
+        self.dlg.set_unlinks_layers(unlinks_list, analysis_unlinks)
+        self.dlg.update_analysis_tabs()
+        self.dlg.update_analysis_tab()
 
     ##
     ## Layer verification functions
@@ -315,36 +312,47 @@ class AnalysisTool(QObject):
         caps = None
         self.axial_id = lfh.getIdField(axial)
         if self.axial_id == '':
-            self.iface.messageBar().pushMessage("Info", "The axial layer has invalid values in the ID column. Using feature ids.", level=0, duration=3)
+            self.iface.messageBar().pushMessage("Info",
+                                                "The axial layer has invalid values in the ID column. Using feature ids.",
+                                                level=0, duration=3)
         # verify axial map
         if self.edit_mode == 0:
             # get ids (to match the object ids in the map)
             self.user_ids['map'] = "%s" % self.axial_id
             if axial.geometryType() == QgsWkbTypes.LineGeometry:
                 caps = axial.dataProvider().capabilities()
-                self.verificationThread = AxialVerification(self.iface.mainWindow(), self, settings, axial, self.user_ids['map'], unlinks)
+                self.verificationThread = AxialVerification(self.iface.mainWindow(), self, settings, axial,
+                                                            self.user_ids['map'], unlinks)
             else:
-                self.iface.messageBar().pushMessage("Info","Select an axial lines map layer.", level=0, duration=3)
+                self.iface.messageBar().pushMessage("Info", "Select an axial lines map layer.", level=0, duration=3)
                 return False
         # verify unlinks
         elif self.edit_mode == 1:
             if unlinks and (axial.storageType() != unlinks.storageType()):
-                self.iface.messageBar().pushMessage("Warning","All layers must be in the same file format.", level=1, duration=3)
+                self.iface.messageBar().pushMessage("Warning", "All layers must be in the same file format.", level=1,
+                                                    duration=3)
                 return False
             caps = unlinks.dataProvider().capabilities()
             self.user_ids['unlinks'] = lfh.getIdField(unlinks)
             if self.user_ids['unlinks'] == '':
-                self.iface.messageBar().pushMessage("Info", "The unlinks layer has invalid values in the ID column. Using feature ids.", level=0, duration=3)
-            if unlinks.fieldNameIndex("line1") == -1 or unlinks.fieldNameIndex("line2") == -1:
-                self.iface.messageBar().pushMessage("Warning", "Line ID columns missing in unlinks layer, please 'Update IDs'.", level=1, duration=3)
+                self.iface.messageBar().pushMessage("Info",
+                                                    "The unlinks layer has invalid values in the ID column. Using feature ids.",
+                                                    level=0, duration=3)
+            if unlinks.dataProvider().fieldNameIndex("line1") == -1 or \
+                    unlinks.dataProvider().fieldNameIndex("line2") == -1:
+                self.iface.messageBar().pushMessage("Warning",
+                                                    "Line ID columns missing in unlinks layer, please 'Update IDs'.",
+                                                    level=1, duration=3)
                 return False
             else:
-                self.verificationThread = UnlinksVerification( self.iface.mainWindow(), self, settings, axial, self.axial_id, unlinks, self.user_ids['unlinks'])
+                self.verificationThread = UnlinksVerification(self.iface.mainWindow(), self, settings, axial,
+                                                              self.axial_id, unlinks, self.user_ids['unlinks'])
         if not caps & QgsVectorDataProvider.AddFeatures:
-            self.iface.messageBar().pushMessage("Info","To edit the selected layer, change to another file format.", level=0, duration=3)
-        #prepare dialog
+            self.iface.messageBar().pushMessage("Info", "To edit the selected layer, change to another file format.",
+                                                level=0, duration=3)
+        # prepare dialog
         self.dlg.lockLayerTab(True)
-        self.dlg.setAxialVerifyProgressbar(0,100)
+        self.dlg.setAxialVerifyProgressbar(0, 100)
         self.dlg.lockAxialEditTab(True)
         self.dlg.clearAxialVerifyReport()
         self.dlg.clearAxialProblems()
@@ -363,15 +371,18 @@ class AnalysisTool(QObject):
         settings = self.dlg.getAxialEditSettings()
         self.axial_id = lfh.getIdField(axial)
         if self.axial_id == '':
-            self.iface.messageBar().pushMessage("Info", "The axial layer has invalid or duplicate values in the id column. Using feature ids instead.", level=0, duration=5)
+            self.iface.messageBar().pushMessage("Info",
+                                                "The axial layer has invalid or duplicate values in the id column. Using feature ids instead.",
+                                                level=0, duration=5)
         # update axial id
         if self.edit_mode == 0:
             self.user_ids['map'] = "%s" % self.axial_id
-            #todo: update axial ids when layer is shapefile
+            # todo: update axial ids when layer is shapefile
         # update unlink line ids
         elif self.edit_mode == 1:
             if unlinks and (axial.storageType() != unlinks.storageType()):
-                self.iface.messageBar().pushMessage("Error","The selected layers must be in the same file format.", level=1, duration=5)
+                self.iface.messageBar().pushMessage("Error", "The selected layers must be in the same file format.",
+                                                    level=1, duration=5)
                 return False
             caps = unlinks.dataProvider().capabilities()
             if caps & QgsVectorDataProvider.ChangeAttributeValues:
@@ -380,10 +391,12 @@ class AnalysisTool(QObject):
                 ids = lfh.getIdFieldNames(unlinks)
                 if ids:
                     self.user_ids['unlinks'] = ids[0]
-                self.verificationThread = UnlinksIdUpdate(self.iface.mainWindow(), self, unlinks, self.user_ids['unlinks'], axial, self.axial_id, settings['unlink_dist'])
+                self.verificationThread = UnlinksIdUpdate(self.iface.mainWindow(), self, unlinks,
+                                                          self.user_ids['unlinks'], axial, self.axial_id,
+                                                          settings['unlink_dist'])
         # prepare dialog
         self.dlg.lockLayerTab(True)
-        self.dlg.setAxialVerifyProgressbar(0,100)
+        self.dlg.setAxialVerifyProgressbar(0, 100)
         self.dlg.lockAxialEditTab(True)
         self.dlg.clearAxialVerifyReport()
         self.dlg.clearAxialProblems()
@@ -397,14 +410,14 @@ class AnalysisTool(QObject):
     def cancelAxialIdUpdate(self, txt=""):
         self.verificationThread.stop()
         if txt:
-            self.iface.messageBar().pushMessage("Error",txt, level=1, duration=5)
+            self.iface.messageBar().pushMessage("Error", txt, level=1, duration=5)
         try:
             self.verificationThread.verificationFinished.disconnect(self.processAxialIdUpdateResults)
             self.verificationThread.verificationProgress.disconnect(self.dlg.updateAxialVerifyProgressbar)
             self.verificationThread.verificationError.disconnect(self.cancelAxialIdUpdate)
         except:
             pass
-        #self.verificationThread = None
+        # self.verificationThread = None
         self.dlg.updateAxialVerifyProgressbar(0)
         self.dlg.lockLayerTab(False)
         self.dlg.lockAxialEditTab(False)
@@ -419,7 +432,7 @@ class AnalysisTool(QObject):
             pass
         self.verificationThread = None
         # reload the layer if columns were added with the ID update
-        if self.datastore['type'] in (1,2):
+        if self.datastore['type'] in (1, 2):
             if self.edit_mode == 0:
                 layer = lfh.getLegendLayerByName(self.iface, self.analysis_layers['map'])
             elif self.edit_mode == 1:
@@ -434,7 +447,7 @@ class AnalysisTool(QObject):
                 cols = dbh.listPostgisColumns(connection, schema, name)
             connection.close()
             # columns-1 to account for the geometry column that is not a field in QGIS
-            if len(layer.dataProvider().fields()) == len(cols)-1:
+            if len(layer.dataProvider().fields()) == len(cols) - 1:
                 layer.dataProvider().reloadData()
             else:
                 lfh.reloadLayer(layer)
@@ -446,14 +459,14 @@ class AnalysisTool(QObject):
     def cancelAxialVerification(self, txt=""):
         self.verificationThread.stop()
         if txt:
-            self.iface.messageBar().pushMessage("Error",txt, level=1, duration=5)
+            self.iface.messageBar().pushMessage("Error", txt, level=1, duration=5)
         try:
             self.verificationThread.verificationFinished.disconnect(self.processAxialVerificationResults)
             self.verificationThread.verificationProgress.disconnect(self.dlg.updateAxialVerifyProgressbar)
             self.verificationThread.verificationError.disconnect(self.cancelAxialVerification)
         except:
             pass
-        #self.verificationThread = None
+        # self.verificationThread = None
         self.dlg.updateAxialVerifyProgressbar(0)
         self.dlg.lockLayerTab(False)
         self.dlg.lockAxialEditTab(False)
@@ -471,11 +484,11 @@ class AnalysisTool(QObject):
         # build summary for filter Combo
         self.dlg.lockAxialEditTab(False)
         if len(nodes) > 0:
-            #nodes_list = sorted(set(nodes))
-            summary = ["All problems (%s)"%len(nodes)]
+            # nodes_list = sorted(set(nodes))
+            summary = ["All problems (%s)" % len(nodes)]
             for k, v in results.items():
                 if len(v) > 0:
-                    summary.append("%s (%s)"%(k.capitalize(),len(v)))
+                    summary.append("%s (%s)" % (k.capitalize(), len(v)))
         else:
             summary = ["No problems found!"]
         self.dlg.setAxialProblemsFilter(summary)
@@ -496,7 +509,7 @@ class AnalysisTool(QObject):
             name = layers['unlinks']
             user_id = self.user_ids['unlinks']
         if name:
-            layer = lfh.getLegendLayerByName(self.iface,name)
+            layer = lfh.getLegendLayerByName(self.iface, name)
         if layer:
             # get layer ids
             if user_id == '':
@@ -527,7 +540,7 @@ class AnalysisTool(QObject):
                 if user_id == '':
                     layer.selectByIds(features)
                 else:
-                    ids = lfh.getFeaturesListValues(layer,user_id,features)
+                    ids = lfh.getFeaturesListValues(layer, user_id, features)
                     layer.selectByIds(list(ids.keys()))
             else:
                 layer.selectByIds([])
@@ -540,43 +553,18 @@ class AnalysisTool(QObject):
                 if layer.geometryType() in (QgsWkbTypes.Polygon, QgsWkbTypes.Point):
                     self.iface.mapCanvas().zoomOut()
 
-
-    ##
-    ## Depthmap analysis functions
-    ##
-    def getDepthmapConnection(self):
-        # newfeature: get these settings from settings manager.
-        # no need for it now as it's hardcoded in depthmapXnet.
-        connection = {'host':'localhost','port':31337}
-        return connection
-
-    def connectDepthmapNet(self):
-        connected = False
-        connection = self.getDepthmapConnection()
-        self.socket = MySocket()
-        # connect socket
-        result = self.socket.connectSocket(connection['host'],connection['port'])
-        # if connection fails give warning and stop analysis
-        if result != '':
-            self.iface.messageBar().pushMessage("Info","Make sure depthmapXnet is running.", level=0, duration=4)
-            connected = False
-            self.socket.closeSocket()
-        else:
-            connected = True
-        return connected
-
-    def runDepthmapAnalysis(self):
+    def run_analysis(self):
         # check if there's a datastore defined
         if not self.isDatastoreSet():
-            #self.iface.messageBar().pushMessage("Warning","Please select a 'Data store' to save the analysis results.", level=1, duration=4)
+            # self.iface.messageBar().pushMessage("Warning","Please select a 'Data store' to save the analysis results.", level=1, duration=4)
             return
         # try to connect to the analysis engine
-        if self.connectDepthmapNet():
-            self.dlg.clearAxialDepthmapReport()
+        if self.analysis_engine.ready():
+            self.dlg.clear_analysis_report()
             # get selected layers
             self.analysis_layers = self.dlg.getAnalysisLayers()
             # get analysis type based on map and axial/segment choice
-            if self.dlg.getDepthmapAnalysisType() == 0:
+            if self.dlg.get_analysis_type() == 0:
                 self.axial_analysis_settings['type'] = 0
             else:
                 if self.dlg.getSegmentedMode() == 0:
@@ -586,23 +574,23 @@ class AnalysisTool(QObject):
             # get the basic analysis settings
             analysis_layer = lfh.getLegendLayerByName(self.iface, self.analysis_layers['map'])
             self.axial_analysis_settings['id'] = lfh.getIdField(analysis_layer)
-            self.axial_analysis_settings['weight'] = self.dlg.getDepthmapWeighted()
-            self.axial_analysis_settings['weightBy'] = self.dlg.getDepthmapWeightAttribute()
-            txt = self.depthmapAnalysis.parseRadii(self.dlg.getDepthmapRadiusText())
+            self.axial_analysis_settings['weight'] = self.dlg.get_analysis_weighted()
+            self.axial_analysis_settings['weightBy'] = self.dlg.get_analysis_weight_attribute()
+            txt = DepthmapEngine.parse_radii(self.dlg.get_analysis_radius_text())
             if txt == '':
-                self.dlg.writeAxialDepthmapReport("Please verify the radius values.")
+                self.dlg.write_analysis_report("Please verify the radius values.")
                 return
             else:
                 self.axial_analysis_settings['rvalues'] = txt
-            self.axial_analysis_settings['output'] = self.dlg.getAxialDepthmapOutputTable()
+            self.axial_analysis_settings['output'] = self.dlg.get_analysis_output_table()
             self.analysis_output = self.axial_analysis_settings['output']
             # get the advanced analysis settings
-            self.axial_analysis_settings['distance'] = self.dlg.getAxialDepthmapDistanceType()
-            self.axial_analysis_settings['radius'] = self.dlg.getAxialDepthmapRadiusType()
-            self.axial_analysis_settings['fullset'] = self.dlg.getAxialDepthmapFullset()
-            self.axial_analysis_settings['betweenness'] = self.dlg.getAxialDepthmapChoice()
-            self.axial_analysis_settings['newnorm'] = self.dlg.getAxialDepthmapNormalised()
-            self.axial_analysis_settings['stubs'] = self.dlg.getAxialDepthmapStubs()
+            self.axial_analysis_settings['distance'] = self.dlg.get_analysis_distance_type()
+            self.axial_analysis_settings['radius'] = self.dlg.get_analysis_radius_type()
+            self.axial_analysis_settings['fullset'] = self.dlg.get_analysis_fullset()
+            self.axial_analysis_settings['betweenness'] = self.dlg.get_analysis_choice()
+            self.axial_analysis_settings['newnorm'] = self.dlg.get_analysis_normalised()
+            self.axial_analysis_settings['stubs'] = self.dlg.get_analysis_stubs()
 
             # check if output file/table already exists
             table_exists = False
@@ -616,36 +604,41 @@ class AnalysisTool(QObject):
             elif self.datastore['type'] == 2:
                 connection = dbh.getPostgisConnection(self.datastore['name'])
                 if connection:
-                    table_exists = dbh.testPostgisTableExists(connection, self.datastore['schema'], self.axial_analysis_settings['output'])
+                    table_exists = dbh.testPostgisTableExists(connection, self.datastore['schema'],
+                                                              self.axial_analysis_settings['output'])
                 connection.close()
             if table_exists:
-                action = QMessageBox.question(None, "Overwrite table", "The output table already exists in:\n %s.\nOverwrite?"% self.datastore['path'], QMessageBox.Ok | QMessageBox.Cancel)
-                if action == QMessageBox.Ok: # Yes
+                action = QMessageBox.question(None, "Overwrite table",
+                                              "The output table already exists in:\n %s.\nOverwrite?" % self.datastore[
+                                                  'path'], QMessageBox.Ok | QMessageBox.Cancel)
+                if action == QMessageBox.Ok:  # Yes
                     pass
-                elif action == QMessageBox.Cancel: # No
+                elif action == QMessageBox.Cancel:  # No
                     return
                 else:
                     return
             # run the analysis
-            command = self.depthmapAnalysis.setupAnalysis(self.analysis_layers, self.axial_analysis_settings)
-            if command and command != '':
+            analysis_ready = self.analysis_engine.setup_analysis(self.analysis_layers, self.axial_analysis_settings)
+            if analysis_ready:
                 self.updateProjectSettings()
                 self.start_time = datetime.datetime.now()
                 # write a short analysis summary
-                message = self.compileDepthmapAnalysisSummary()
+                message = self.compile_analysis_summary()
                 # print message in results window
-                self.dlg.writeAxialDepthmapReport(message)
-                self.dlg.lockAxialDepthmapTab(True)
-                self.iface.messageBar().pushMessage("Info", "Do not close QGIS or depthmapXnet while the analysis is running!", level=0, duration=5)
-                # start the analysis by sending the command and starting the timer
-                bytessent = self.socket.sendData(command)
-                #timer to check if results are ready, in milliseconds
+                self.dlg.write_analysis_report(message)
+                self.dlg.lock_analysis_tab(True)
+                self.iface.messageBar().pushMessage("Info",
+                                                    "Do not close QGIS or depthmapXnet while the analysis is running!",
+                                                    level=0, duration=5)
+                self.analysis_engine.start_analysis()
+                # timer to check if results are ready, in milliseconds
                 self.timer.start(1000)
                 self.running_analysis = 'axial'
             else:
-                self.dlg.writeAxialDepthmapReport("Unable to run this analysis. Please check the input layer and analysis settings.")
+                self.dlg.write_analysis_report(
+                    "Unable to run this analysis. Please check the input layer and analysis settings.")
 
-    def compileDepthmapAnalysisSummary(self):
+    def compile_analysis_summary(self):
         message = u"Running analysis for map layer '%s':" % self.analysis_layers['map']
         if self.analysis_layers['unlinks']:
             message += u"\n   unlinks layer - '%s'" % self.analysis_layers['unlinks']
@@ -683,95 +676,68 @@ class AnalysisTool(QObject):
         message += u"\n\nStart: %s\n..." % self.start_time.strftime("%d/%m/%Y %H:%M:%S")
         return message
 
-    def cancelDepthmapAnalysis(self):
+    def cancel_analysis(self):
         if self.running_analysis == 'axial':
-            self.dlg.setAxialDepthmapProgressbar(0, 100)
-            self.dlg.lockAxialDepthmapTab(False)
-            self.dlg.writeAxialDepthmapReport("Analysis canceled by user.")
+            self.dlg.set_analysis_progressbar(0, 100)
+            self.dlg.lock_analysis_tab(False)
+            self.dlg.write_analysis_report("Analysis canceled by user.")
         self.timer.stop()
-        self.socket.closeSocket()
+        self.analysis_engine.cleanup()
         self.running_analysis = ''
 
-    def checkDepthmapAnalysisProgress(self):
-        error = False
-        result = self.socket.isReady()
-        if result:
-            connected, msg = self.socket.checkData(4096)
-            if "--r" in msg or "esult" in msg:
+    def check_analysis_progress(self):
+        try:
+            step, progress = self.analysis_engine.get_progress(self.axial_analysis_settings, self.datastore)
+            if not progress:
+                # no progress, just wait...
+                return
+            elif progress == 100:
                 self.timer.stop()
-                # retrieve all the remaining data
-                if not msg.endswith("--result--\n"):
-                    received, result = self.socket.receiveData(4096,"--result--\n")
-                    if received:
-                        msg += result
-                self.socket.closeSocket()
                 # update calculation time
                 dt = datetime.datetime.now()
                 feedback = u"Finish: %s" % dt.strftime("%d/%m/%Y %H:%M:%S")
-                self.dlg.writeAxialDepthmapReport(feedback)
-                #process the output in the analysis
-                self.processDepthmapAnalysisResults(msg)
+                self.dlg.write_analysis_report(feedback)
+                # process the output in the analysis
+                self.process_analysis_results(self.analysis_engine.analysis_results)
                 self.running_analysis = ''
-            elif "--comm: 3," in msg:
-                prog = self.updateDepthmapAnalysisProgress(msg)
+            else:
                 if self.running_analysis == 'axial':
-                    self.dlg.updateAxialDepthmapProgressbar(prog)
-            elif not connected:
-                error = True
-        else:
-            error = True
-        if error:
+                    self.dlg.update_analysis_progressbar(progress)
+                    if step > 0:
+                        self.timer.start(step)
+        except AnalysisEngine.AnalysisEngineError as engine_error:
             if self.running_analysis == 'axial':
-                self.dlg.setAxialDepthmapProgressbar(0, 100)
-                self.dlg.lockAxialDepthmapTab(False)
-                self.dlg.writeAxialDepthmapReport("Analysis error.")
+                self.dlg.set_analysis_progressbar(0, 100)
+                self.dlg.lock_analysis_tab(False)
+                self.dlg.write_analysis_report("Analysis error: " + str(engine_error))
             self.timer.stop()
-            self.socket.closeSocket()
+            self.analysis_engine.cleanup()
             self.running_analysis = ''
 
-    def updateDepthmapAnalysisProgress(self,msg):
-        # calculate percent done and adjust timer
-        relprog = 0
-        # extract number of nodes
-        if "--comm: 2," in msg:
-            pos1 = msg.find(": 2,")
-            pos2 = msg.find(",0 --", pos1)
-            self.analysis_nodes = int(msg[(pos1 + 4):pos2])
-            step = int(self.analysis_nodes) * 0.2
-            self.timer.start(step)
-        # extract progress info from string
-        progress = msg.split("\n")
-        # calculate progress
-        if self.analysis_nodes > 0:
-            pos1 = progress[-2].find(": 3,")
-            pos2 = progress[-2].find(",0 ")
-            prog = progress[-2][(pos1 + 4):pos2]
-            relprog = (float(prog) / float(self.analysis_nodes)) * 100
-        return relprog
-
-    def processDepthmapAnalysisResults(self, msg):
+    def process_analysis_results(self, analysis_results: AnalysisEngine.AnalysisResults):
         new_layer = None
         if self.running_analysis == 'axial':
-            self.dlg.setAxialDepthmapProgressbar(100, 100)
-            attributes, types, values, coords = self.depthmapAnalysis.processAnalysisResult(self.datastore, msg)
-            if attributes:
+            self.dlg.set_analysis_progressbar(100, 100)
+            if analysis_results.attributes:
                 dt = datetime.datetime.now()
                 message = u"Post-processing start: %s\n..." % dt.strftime("%d/%m/%Y %H:%M:%S")
-                self.dlg.writeAxialDepthmapReport(message)
-                new_layer = self.saveAnalysisResults(attributes, types, values, coords)
+                self.dlg.write_analysis_report(message)
+                new_layer = self.save_analysis_results(analysis_results.attributes, analysis_results.types,
+                                                       analysis_results.values, analysis_results.coords)
                 # update processing time
                 dt = datetime.datetime.now()
                 message = u"Post-processing finish: %s" % dt.strftime("%d/%m/%Y %H:%M:%S")
-                self.dlg.writeAxialDepthmapReport(message)
+                self.dlg.write_analysis_report(message)
             else:
-                self.iface.messageBar().pushMessage("Info","Failed to import the analysis results.",level=1,duration=5)
-                self.dlg.writeAxialDepthmapReport(u"Post-processing: Failed!")
+                self.iface.messageBar().pushMessage("Info", "Failed to import the analysis results.", level=1,
+                                                    duration=5)
+                self.dlg.write_analysis_report(u"Post-processing: Failed!")
             self.end_time = datetime.datetime.now()
             elapsed = self.end_time - self.start_time
             message = u"Total running time: %s" % elapsed
-            self.dlg.writeAxialDepthmapReport(message)
-            self.dlg.lockAxialDepthmapTab(False)
-            self.dlg.setAxialDepthmapProgressbar(0, 100)
+            self.dlg.write_analysis_report(message)
+            self.dlg.lock_analysis_tab(False)
+            self.dlg.set_analysis_progressbar(0, 100)
         if new_layer:
             existing_names = [layer.name() for layer in lfh.getLegendLayers(self.iface)]
             if new_layer.name() in existing_names:
@@ -781,8 +747,7 @@ class AnalysisTool(QObject):
             QgsProject.instance().addMapLayer(new_layer)
             new_layer.updateExtents()
 
-
-    def saveAnalysisResults(self, attributes, types, values, coords):
+    def save_analysis_results(self, attributes, types, values, coords):
         # Save results to output
         res = False
         analysis_layer = lfh.getLegendLayerByName(self.iface, self.analysis_layers['map'])
@@ -794,19 +759,48 @@ class AnalysisTool(QObject):
         new_layer = None
         # must check if data store is still there
         if not self.isDatastoreSet():
-            self.iface.messageBar().pushMessage("Warning","The analysis results will be saved in a memory layer.",level=0,duration=5)
+            self.iface.messageBar().pushMessage("Warning", "The analysis results will be saved in a memory layer.",
+                                                level=0, duration=5)
         # save output based on data store format and type of analysis
         provider = analysis_layer.storageType()
         create_table = False
         # if it's a segment analysis always create a new layer
         # also if one of these is different: output table name, file type, data store location, number of records
         # this last one is a weak check for changes to the table. making a match of results by id would take ages.
-        if analysis_layer.name() != table or self.axial_analysis_settings['type'] == 1 or len(values) != analysis_layer.featureCount():
+        if analysis_layer.name() != table or self.axial_analysis_settings['type'] == 1 or len(
+                values) != analysis_layer.featureCount():
             create_table = True
         # shapefile data store
         if self.datastore['type'] == 0:
-            if lfh.getLayerPath(analysis_layer) != path or analysis_layer.name() != table:
+            existing_layer_path = lfh.getLayerPath(analysis_layer) + "/" + analysis_layer.name() + ".shp"
+            new_layer_path = path + "/" + table + ".shp"
+            original_table_name = table
+
+            if len(values) != analysis_layer.featureCount() and existing_layer_path == new_layer_path:
+                # we can't overwrite the file anymore because the number of lines is not the same,
+                # force a new file, by appending a number at the end
+                overwrite_counter = 1
+                while os.path.isfile(new_layer_path):
+                    # repeat until no such path exists
+                    table = original_table_name + "_" + str(overwrite_counter)
+                    new_layer_path = path + "/" + table + ".shp"
+                    overwrite_counter = overwrite_counter + 1
+                    if overwrite_counter > 1000:
+                        self.iface.messageBar().pushMessage("Error",
+                                                            "Existing file and newly suggested file have different "
+                                                            "number of lines, but can not create new file as too many "
+                                                            "existing duplicates",
+                                                            level=Qgis.Critical, duration=5)
+
+            if original_table_name != table:
+                self.iface.messageBar().pushMessage("Warning",
+                                                    "Existing file and newly suggested file have different "
+                                                    "number of lines, new file created with different name",
+                                                    level=Qgis.Warning, duration=5)
+            if original_table_name == table and \
+                    (lfh.getLayerPath(analysis_layer) != path or analysis_layer.name() != table):
                 create_table = True
+
             # convert type of choice columns to float
             for attr in attributes:
                 if 'CH' in attr:
@@ -814,7 +808,8 @@ class AnalysisTool(QObject):
                     types[idx] = QVariant.Double
             # write a new file
             if 'shapefile' not in provider.lower() or create_table:
-                new_layer = shph.createShapeFileFullLayer(path, table, srid, attributes, types, values, coords)
+                new_layer = shph.create_shapefile_full_layer_data_provider(path, table, srid, attributes,
+                                                                           types, values, coords)
                 if new_layer:
                     res = True
                 else:
@@ -828,7 +823,8 @@ class AnalysisTool(QObject):
             if not dbh.testSpatialiteTableExists(connection, self.axial_analysis_settings['output']):
                 create_table = True
             if 'spatialite' not in provider.lower() or create_table:
-                res = dbh.createSpatialiteTable(connection, path, table, srid.postgisSrid(), attributes, types, 'MULTILINESTRING')
+                res = dbh.createSpatialiteTable(connection, path, table, srid.postgisSrid(), attributes, types,
+                                                'MULTILINESTRING')
                 if res:
                     res = dbh.insertSpatialiteValues(connection, table, attributes, values, coords)
                     if res:
@@ -852,10 +848,12 @@ class AnalysisTool(QObject):
         elif self.datastore['type'] == 2:
             schema = self.datastore['schema']
             connection = dbh.getPostgisConnection(self.datastore['name'])
-            if not dbh.testPostgisTableExists(connection, self.datastore['schema'], self.axial_analysis_settings['output']):
+            if not dbh.testPostgisTableExists(connection, self.datastore['schema'],
+                                              self.axial_analysis_settings['output']):
                 create_table = True
             if 'postgresql' not in provider.lower() or create_table:
-                res = dbh.createPostgisTable(connection, schema, table, srid.postgisSrid(), attributes, types, 'MULTILINESTRING')
+                res = dbh.createPostgisTable(connection, schema, table, srid.postgisSrid(), attributes, types,
+                                             'MULTILINESTRING')
                 if res:
                     res = dbh.insertPostgisValues(connection, schema, table, attributes, values, coords)
                     if res:
@@ -882,100 +880,3 @@ class AnalysisTool(QObject):
             new_layer = lfh.createTempLayer(table, srid.postgisSrid(), attributes, types, values, coords)
 
         return new_layer
-
-
-# socket class with adapted methods and error trapping, derived from QObject to support Signals
-class MySocket(QObject):
-    def __init__(self, s=None):
-        QObject.__init__(self)
-        if s is None:
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        else:
-            self.sock = s
-
-    def connectSocket(self, host, port):
-        msg = ''
-        try:
-            self.sock.connect((host, port))
-        except socket.error as errormsg:
-            msg = errormsg.strerror
-        return msg
-
-    def sendData(self, data):
-        size = len(data)
-        sent = False
-        totalsent = 0
-        try:
-            while totalsent < size:
-                sent = self.sock.send(data[totalsent:].encode('ascii'))
-                if sent == False:
-                    raise IOError("Socket connection broken")
-                totalsent = totalsent + sent
-            sent = True
-            msg = totalsent
-        except socket.error as errormsg:
-            #self.closeSocket()
-            sent = False
-            msg = errormsg
-        return sent, str(msg)
-
-    def isReady(self):
-        try:
-            to_read, to_write, exception = select.select([self.sock],[],[self.sock], 0)
-            if exception:
-                waiting = False
-            else:
-                waiting = True
-        except:
-            waiting = False
-        return waiting
-
-    def checkData(self, buff=1):
-        check = False
-        msg = ''
-        try:
-            msg = self.sock.recv(buff).decode('ascii')
-            if msg == '':
-                check = False
-            else:
-                check = True
-        except socket.error as errormsg:
-            msg = errormsg
-            check = False
-        return check, msg
-
-    def dumpData(self, buff=1):
-        dump = False
-        msg = ''
-        try:
-            while True:
-                chunk = self.sock.recv(buff).decode('ascii')
-                if not chunk:
-                    break
-                msg += chunk
-            dump = True
-        except socket.error as errormsg:
-            msg = errormsg
-            dump = False
-        return dump, msg
-
-    def receiveData(self, buff=1024, suffix=''):
-        receive = False
-        msg = ''
-        try:
-            while True:
-                chunk = self.sock.recv(buff).decode('ascii')
-                if not chunk:
-                    break
-                msg += chunk
-                if msg.endswith(suffix):
-                    break
-            receive = True
-        except socket.error as errormsg:
-            msg = errormsg
-            receive = False
-        return receive, msg
-
-    def closeSocket(self):
-        self.sock.close()
-        #self.sock = None

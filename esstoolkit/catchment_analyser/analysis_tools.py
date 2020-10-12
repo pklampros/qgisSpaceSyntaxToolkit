@@ -1,37 +1,33 @@
 # -*- coding: utf-8 -*-
-"""
-/***************************************************************************
- CatchmentAnalyser
-                             Catchment Analyser
- Network based catchment analysis
-                              -------------------
-        begin                : 2016-05-19
-        author               : Laurens Versluis
-        copyright            : (C) 2016 by Space Syntax Limited
-        email                : l.versluis@spacesyntax.com
- ***************************************************************************/
 
-/***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- ***************************************************************************/
+# Space Syntax Toolkit
+# Set of tools for essential space syntax network analysis and results exploration
+# -------------------
+# begin                : 2016-05-19
+# copyright            : (C) 2016 by Space Syntax Limited
+# author               : Laurens Versluis
+# email                : l.versluis@spacesyntax.com
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+
+""" Network based catchment analysis
 """
+
 from __future__ import print_function
-
-from builtins import str
-from builtins import range
-from builtins import object
-
-from qgis.core import (QgsGeometry, QgsPoint)
-from qgis.analysis import QgsNetworkSpeedStrategy
-from shapely.geometry import Point, Polygon
 
 import math
 import os.path
+from builtins import object
+from builtins import range
+from builtins import str
+
+from qgis.PyQt.QtCore import QSettings
+from qgis.analysis import QgsNetworkSpeedStrategy
+from qgis.core import (QgsGeometry, QgsPoint)
+
 
 # check: https://gis.stackexchange.com/questions/220116/properter-to-get-travel-time-as-cost-for-network-analysis
 class SpeedFieldProperter(QgsNetworkSpeedStrategy):
@@ -43,7 +39,8 @@ class SpeedFieldProperter(QgsNetworkSpeedStrategy):
     @speedToDistanceFactor - factor to adjust speed units (e.g. km/h) to distance units (e.g. meters)
     if the speed attribute is in km/h and distance in meters, this should equal 1000
     """
-    def __init__(self, attributeIndex, defaultSpeed = 50, speedToDistanceFactor = 1000):
+
+    def __init__(self, attributeIndex, defaultSpeed=50, speedToDistanceFactor=1000):
         QgsNetworkSpeedStrategy.__init__(self)
         self.AttributeIndex = attributeIndex
         self.DefaultSpeed = defaultSpeed
@@ -64,6 +61,7 @@ class SpeedFieldProperter(QgsNetworkSpeedStrategy):
         needed for cost calculation in property()
         """
         return [self.AttributeIndex]
+
 
 class CustomCost(QgsNetworkSpeedStrategy):
     def __init__(self, costColumIndex, defaultValue):
@@ -240,6 +238,7 @@ class ConcaveHull(object):
         """
         Writes the geometry described by *point_list* in Well Known Text format to file
         :param point_list: list of tuples (x, y)
+        :param file_name: file name to write to
         :return: None
         """
         if file_name is None:
@@ -260,11 +259,22 @@ class ConcaveHull(object):
     def as_wkt(self, point_list):
         """
         Returns the geometry described by *point_list* in Well Known Text format
+
         Example: hull = self.as_wkt(the_hull)
                  feature.setGeometry(QgsGeometry.fromWkt(hull))
-        :param point_list: list of tuples (x, y)
-        :return: polygon geometry as WTK
+
+        Parameters
+        ----------
+        point_list : array_like
+            list of tuples (x, y)
+
+        Returns
+        -------
+        vl : `str`
+            polygon geometry as WTK
+
         """
+
         wkt = 'POLYGON((' + str(point_list[0][0]) + ' ' + str(point_list[0][1])
         for p in point_list[1:]:
             wkt += ', ' + str(p[0]) + ' ' + str(p[1])
@@ -274,8 +284,20 @@ class ConcaveHull(object):
     def as_polygon(self, point_list):
         """
         Returns the geometry described by *point_list* in as QgsGeometry
-        :param point_list: list of tuples (x, y)
-        :return: QgsGeometry
+
+        Example: hull = self.as_wkt(the_hull)
+                 feature.setGeometry(QgsGeometry.fromWkt(hull))
+
+        Parameters
+        ----------
+        point_list : array_like
+            list of tuples (x, y)
+
+        Returns
+        -------
+        vl : `QgsGeometry`
+            polygon geometry as QgsGeometry
+
         """
         # create a list of QgsPoint() from list of point coordinate strings in *point_list*
         points = [QgsPoint(point[0], point[1]) for point in point_list]
@@ -313,7 +335,6 @@ class ConcaveHull(object):
         :param geom: an arbitrary geometry feature
         :return: list of points
         """
-        multi_geom = QgsGeometry()
         temp_geom = []
         # point geometry
         if geom.type() == 0:
@@ -440,8 +461,8 @@ class ConcaveHull(object):
             # for the next candidate fails. The algorithm starts again with an increased number of neighbors
             if its is True:
                 # this tries to remove the potentially problematic recursion. might give less optimal results
-                #point_set = self.remove_point(point_set, current_point)
-                #continue
+                # point_set = self.remove_point(point_set, current_point)
+                # continue
                 return self.concave_hull(points_list, kk + 1)
 
             # the first point which complies with the requirements is added to the hull and gets the current point

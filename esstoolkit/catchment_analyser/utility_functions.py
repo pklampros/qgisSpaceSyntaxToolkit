@@ -1,40 +1,26 @@
 # -*- coding: utf-8 -*-
-"""
-/***************************************************************************
- CatchmentAnalyser
-                             Catchment Analyser
- Network based catchment analysis
-                              -------------------
-        begin                : 2016-05-19
-        author               : Laurens Versluis
-        copyright            : (C) 2016 by Space Syntax Limited
-        email                : l.versluis@spacesyntax.com
- ***************************************************************************/
 
-/***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- ***************************************************************************/
-"""
+# Space Syntax Toolkit
+# Set of tools for essential space syntax network analysis and results exploration
+# -------------------
+# begin                : 2016-05-19
+# copyright            : (C) 2016 by Space Syntax Limited
+# author               : Laurens Versluis
+# email                : l.versluis@spacesyntax.com
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+
 from __future__ import print_function
 
-from builtins import str
-from qgis.PyQt.QtCore import QVariant
-from qgis.core import (QgsProject, QgsMapLayer, QgsVectorLayer, QgsField, QgsFeature, QgsGeometry, QgsVectorFileWriter, NULL)
 import ntpath
+
 import psycopg2
 from psycopg2.extensions import AsIs
-
-def getLayerByName(name):
-    layer = None
-    for i in list(QgsProject.instance().mapLayers().values()):
-        if i.name() == name:
-            layer = i
-    return layer
+from qgis.core import (QgsProject, QgsMapLayer, QgsVectorLayer, QgsField, QgsFeature, QgsGeometry, QgsVectorFileWriter,
+                       NULL, QgsWkbTypes, QgsCoordinateTransformContext)
 
 
 def getLegendLayersNames(iface, geom='all', provider='all'):
@@ -51,18 +37,6 @@ def getLegendLayersNames(iface, geom='all', provider='all'):
     return layers_list
 
 
-def getNumericFieldNames(layer, type='all'):
-    field_names = []
-    if type == 'all':
-        types = (QVariant.Int, QVariant.LongLong, QVariant.Double, QVariant.UInt, QVariant.ULongLong)
-    else:
-        types = [type]
-    if layer and layer.dataProvider():
-        for field in layer.dataProvider().fields():
-            if field.type() in types:
-                field_names.append(field.name())
-    return field_names
-
 def check_for_NULL_geom(layer):
     has_null = False
     for f in layer.getFeatures():
@@ -70,6 +44,7 @@ def check_for_NULL_geom(layer):
             has_null = True
             break
     return has_null
+
 
 def createTempLayer(name, geometry, srid, attributes, types):
     # Geometry can be 'POINT', 'LINESTRING' or 'POLYGON' or the 'MULTI' version of the previous
@@ -121,46 +96,10 @@ def createShapeFile(layer, path, crs):
     return shapefile
 
 
-
-def getPostgisSchemas(connstring, commit=False):
-    """Execute query (string) with given parameters (tuple)
-    (optionally perform commit to save Db)
-    :return: result set [header,data] or [error] error
-    """
-
-    try:
-        connection = psycopg2.connect(connstring)
-    except psycopg2.Error as e:
-        print(e.pgerror)
-        connection = None
-
-    schemas = []
-    data = []
-    if connection:
-        query = str("""SELECT schema_name from information_schema.schemata;""")
-        cursor = connection.cursor()
-        try:
-            cursor.execute(query)
-            if cursor.description is not None:
-                data = cursor.fetchall()
-            if commit:
-                connection.commit()
-        except psycopg2.Error as e:
-            connection.rollback()
-        cursor.close()
-
-    # only extract user schemas
-    for schema in data:
-        if schema[0] not in ('topology', 'information_schema') and schema[0][:3] != 'pg_':
-            schemas.append(schema[0])
-    #return the result even if empty
-    return sorted(schemas)
-
 # WRITE -----------------------------------------------------------------
 
 # geom_type allowed: 'Point', 'Linestring', 'Polygon'
 def to_layer(fields, crs, encoding, geom_type, layer_type, path):
-
     layer = None
     if layer_type == 'memory':
         layer = QgsVectorLayer(geom_type + '?crs=' + crs.authid(), path, "memory")
@@ -170,11 +109,12 @@ def to_layer(fields, crs, encoding, geom_type, layer_type, path):
 
     elif layer_type == 'shapefile':
 
-        wkbTypes = { 'Point': QgsWkbTypes.Point, 'Linestring': QgsWkbTypes.LineString, 'Polygon': QgsWkbTypes.Polygon }
+        wkbTypes = {'Point': QgsWkbTypes.Point, 'Linestring': QgsWkbTypes.LineString, 'Polygon': QgsWkbTypes.Polygon}
         options = QgsVectorFileWriter.SaveVectorOptions()
         options.driverName = "ESRI Shapefile"
         options.fileEncoding = encoding
-        file_writer = QgsVectorFileWriter.create(path, fields, wkbTypes[geom_type], crs, QgsCoordinateTransformContext(), options)
+        file_writer = QgsVectorFileWriter.create(path, fields, wkbTypes[geom_type], crs,
+                                                 QgsCoordinateTransformContext(), options)
         if file_writer.hasError() != QgsVectorFileWriter.NoError:
             print("Error when creating shapefile: ", file_writer.errorMessage())
         del file_writer
@@ -191,8 +131,9 @@ def to_layer(fields, crs, encoding, geom_type, layer_type, path):
         try:
             con = psycopg2.connect(connstring)
             cur = con.cursor()
-            create_query = cur.mogrify("""DROP TABLE IF EXISTS "%s"."%s"; CREATE TABLE "%s"."%s"( geom geometry(%s, %s))""", (
-                    AsIs(schema_name), AsIs(table_name), AsIs(schema_name), AsIs(table_name),geom_type, AsIs(crs_id)))
+            create_query = cur.mogrify(
+                """DROP TABLE IF EXISTS "%s"."%s"; CREATE TABLE "%s"."%s"( geom geometry(%s, %s))""", (
+                    AsIs(schema_name), AsIs(table_name), AsIs(schema_name), AsIs(table_name), geom_type, AsIs(crs_id)))
             cur.execute(create_query)
             con.commit()
             post_q_flds = {2: 'bigint', 6: 'numeric', 1: 'bool', 'else': 'text', 4: 'numeric'}
@@ -200,7 +141,8 @@ def to_layer(fields, crs, encoding, geom_type, layer_type, path):
                 f_type = f.type()
                 if f_type not in [2, 6, 1]:
                     f_type = 'else'
-                attr_query = cur.mogrify("""ALTER TABLE "%s"."%s" ADD COLUMN "%s" %s""", (AsIs(schema_name), AsIs(table_name), AsIs(f.name()), AsIs(post_q_flds[f_type])))
+                attr_query = cur.mogrify("""ALTER TABLE "%s"."%s" ADD COLUMN "%s" %s""", (
+                AsIs(schema_name), AsIs(table_name), AsIs(f.name()), AsIs(post_q_flds[f_type])))
                 cur.execute(attr_query)
                 con.commit()
             layer = QgsVectorLayer(uri, table_name, 'postgres')
@@ -208,13 +150,13 @@ def to_layer(fields, crs, encoding, geom_type, layer_type, path):
             print(e)
     return layer
 
+
 def has_unique_values(column, layer):
     if column:
         values = [f[column] for f in layer.getFeatures()]
-        if NULL in values: # len(values) > len(set(values)) or
+        if NULL in values:  # len(values) > len(set(values)) or
             return False
         else:
             return True
     else:
         return True
-

@@ -1,47 +1,30 @@
 # -*- coding: utf-8 -*-
-"""
-/***************************************************************************
- essToolkit
-                            Space Syntax Toolkit
- Set of tools for essential space syntax network analysis and results exploration
-                              -------------------
-        begin                : 2014-04-01
-        copyright            : (C) 2015, UCL
-        author               : Jorge Gil
-        email                : jorge.gil@ucl.ac.uk
- ***************************************************************************/
 
-/***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- ***************************************************************************/
-"""
+# Space Syntax Toolkit
+# Set of tools for essential space syntax network analysis and results exploration
+# -------------------
+# begin                : 2014-04-01
+# copyright            : (C) 2015, UCL
+# author               : Jorge Gil, Petros Koutsolampros
+# email                : jorge.gil@ucl.ac.uk
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+
 from __future__ import print_function
 
-from builtins import zip
-from builtins import str
+import math
 from builtins import range
+from builtins import str
 
 import numpy as np
 
-import os.path
-import math
-import sys
-from itertools import zip_longest
 
-#------------------------------
+# ------------------------------
 # General functions
-#------------------------------
-
-# Return iterator with items of iterable grouped by n
-def grouper(iterable, n, fillvalue=None):
-    args = [iter(iterable)] * n
-    return zip_longest(*args, fillvalue=fillvalue)
-
+# ------------------------------
 
 # check if a text string is of numeric type
 def isNumeric(txt):
@@ -84,17 +67,17 @@ def roundNumber(num):
             convertNumeric(num)
         rounded = num
         if num > 100 or num < -100:
-            rounded = round(num,1)
+            rounded = round(num, 1)
         elif (1 < num <= 100) or (-1 > num >= -100):
-            rounded = round(num,2)
+            rounded = round(num, 2)
         elif (0.01 < num <= 1) or (-0.01 > num >= -1):
-            rounded = round(num,4)
+            rounded = round(num, 4)
         else:
-            rounded = round(num,6)
+            rounded = round(num, 6)
         return rounded
 
 
-def truncateNumberString(num,digits=9):
+def truncateNumberString(num, digits=9):
     if isNumeric(num):
         truncated = str(num)
         if '.' in truncated:
@@ -103,10 +86,11 @@ def truncateNumberString(num,digits=9):
         return convertNumeric(truncated)
 
 
-def truncateNumber(num,digits=9):
+def truncateNumber(num, digits=9):
     if isNumeric(num):
         truncated = math.floor(num * 10 ** digits) / 10 ** digits
         return truncated
+
 
 def numSigDigits(num):
     """Returns the number of significant digits in a number.
@@ -118,7 +102,7 @@ def numSigDigits(num):
     if isNumeric(num):
         # number the digits:
         enumerated_chars = list(enumerate(str(num)))
-        #for x in enumerated_chars:
+        # for x in enumerated_chars:
         #    if x[1] in (u'.',u','):
         #        decimal = x[1]
         non_zero_chars = [x for x in enumerated_chars if (x[1] != '0') and (x[1] != decimal)]
@@ -157,9 +141,9 @@ def calcGini(values):
     S = sorted(values)
     N = len(values)
     T = sum(values)
-    P = sum(xi * (i+1) for i,xi in enumerate(S))
-    G = 2.0 * P/(N * T)
-    gini = G - 1 - (1./N)
+    P = sum(xi * (i + 1) for i, xi in enumerate(S))
+    G = 2.0 * P / (N * T)
+    gini = G - 1 - (1. / N)
     return gini
 
 
@@ -172,10 +156,10 @@ def calcBins(values, minbins=3, maxbins=128):
     if not isinstance(values, np.ndarray):
         values = np.array(values)
     # calculate stats
-    range = np.nanmax(values)-np.nanmin(values)
-    IQR = np.percentile(values,75)-np.percentile(values,25)
+    range = np.nanmax(values) - np.nanmin(values)
+    IQR = np.percentile(values, 75) - np.percentile(values, 25)
     # calculate bin size
-    bin_size = 2 * IQR * np.size(values)**(-1.0/3)
+    bin_size = 2 * IQR * np.size(values) ** (-1.0 / 3)
     # calculate number of bins
     if bin_size > 0:
         nbins = range / bin_size
@@ -204,4 +188,3 @@ def calcPvalue(x, y):
             ydiff2 += ydiff * ydiff
         pearson = diffprod / math.sqrt(xdiff2 * ydiff2)
     return pearson
-

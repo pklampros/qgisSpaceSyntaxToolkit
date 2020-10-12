@@ -1,33 +1,27 @@
 # -*- coding: utf-8 -*-
-"""
-/***************************************************************************
- CreateNew_EntranceDialog
-                                 A QGIS plugin
- CreateNew_Entrance
-                             -------------------
-        begin                : 2016-08-16
-        git sha              : $Format:%H$
-        copyright            : (C) 2016 by AA
-        email                : AA
- ***************************************************************************/
 
-/***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- ***************************************************************************/
-"""
-from __future__ import print_function
+# Space Syntax Toolkit
+# Set of tools for essential space syntax network analysis and results exploration
+# -------------------
+# begin                : 2016-08-16
+# copyright            : (C) 2016 by Abhimanyu Acharya/(C) 2016 by Space Syntax Limited’.
+# author               : Abhimanyu Acharya
+# email                : a.acharya@spacesyntax.com
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+
 from __future__ import absolute_import
+from __future__ import print_function
 
 import os
 
 from qgis.PyQt import QtCore, QtWidgets, uic
-from .utility_functions import getQGISDbs
+
 from .DbSettings_dialog import DbSettingsDialog
+from esstoolkit.utilities import db_helpers as dbh
 
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
     os.path.dirname(__file__), 'CreateNew_Entrance_dialog_base.ui'))
@@ -49,9 +43,9 @@ class CreateNew_EntranceDialog(QtWidgets.QDialog, FORM_CLASS):
         # setup signals
         self.pushButtonSelectLocationEntrance.clicked.connect(self.selectSaveLocationEntrance)
         self.pushButtonEntrancesNewFileDLG.clicked.connect(self.newEntranceLayer)
-        self.closePopUpEntrancesButton.clicked.connect(self.closePopUpEntrances)        
-        
-        available_dbs = getQGISDbs()
+        self.closePopUpEntrancesButton.clicked.connect(self.closePopUpEntrances)
+
+        available_dbs = dbh.getQGISDbs()
         self.dbsettings_dlg = DbSettingsDialog(available_dbs)
         self.dbsettings_dlg.nameLineEdit.setText('entrances')
 
@@ -66,7 +60,7 @@ class CreateNew_EntranceDialog(QtWidgets.QDialog, FORM_CLASS):
         self.e_memory_radioButton.clicked.connect(self.setOutput)
         self.pushButtonSelectLocationEntrance.setDisabled(True)
 
-        #self.dbsettings_dlg.setDbOutput.connect(self.setOutput)
+        # self.dbsettings_dlg.setDbOutput.connect(self.setOutput)
         self.dbsettings_dlg.dbCombo.currentIndexChanged.connect(self.setDbPath)
         self.dbsettings_dlg.schemaCombo.currentIndexChanged.connect(self.setDbPath)
         self.dbsettings_dlg.nameLineEdit.textChanged.connect(self.setDbPath)
@@ -77,7 +71,7 @@ class CreateNew_EntranceDialog(QtWidgets.QDialog, FORM_CLASS):
     # Open Save file dialogue and set location in text edit
     def selectSaveLocationEntrance(self):
         if self.e_shp_radioButton.isChecked():
-            filename = QtWidgets.QFileDialog.getSaveFileName(None, "Specify Output Location ", "", '*.shp')
+            filename, _ = QtWidgets.QFileDialog.getSaveFileName(None, "Specify Output Location ", "", '*.shp')
             self.lineEditEntrances.clear()
             self.lineEditEntrances.setText(filename)
         elif self.e_postgis_radioButton.isChecked():
@@ -99,7 +93,7 @@ class CreateNew_EntranceDialog(QtWidgets.QDialog, FORM_CLASS):
             try:
                 self.dbsettings = self.dbsettings_dlg.getDbSettings()
                 db_layer_name = "%s:%s:%s" % (
-                self.dbsettings['dbname'], self.dbsettings['schema'], self.dbsettings['table_name'])
+                    self.dbsettings['dbname'], self.dbsettings['schema'], self.dbsettings['table_name'])
                 self.lineEditEntrances.setText(db_layer_name)
             except:
                 self.lineEditEntrances.clear()

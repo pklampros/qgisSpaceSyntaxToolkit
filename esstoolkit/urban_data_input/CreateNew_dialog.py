@@ -1,31 +1,26 @@
 # -*- coding: utf-8 -*-
-"""
-/***************************************************************************
- UrbanDataInputDockWidget
-                                 A QGIS plugin
- Urban Data Input Tool for QGIS
-                             -------------------
-        begin                : 2016-06-03
-        git sha              : $Format:%H$
-        copyright            : (C) 2016 by Abhimanyu Acharya/(C) 2016 by Space Syntax Limited’.
-        email                : a.acharya@spacesyntax.com
- ***************************************************************************/
 
-/***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- ***************************************************************************/
-"""
-from __future__ import print_function
+# Space Syntax Toolkit
+# Set of tools for essential space syntax network analysis and results exploration
+# -------------------
+# begin                : 2016-06-03
+# copyright            : (C) 2016 by Abhimanyu Acharya/(C) 2016 by Space Syntax Limited’.
+# author               : Abhimanyu Acharya
+# email                : a.acharya@spacesyntax.com
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+
 from __future__ import absolute_import
+from __future__ import print_function
 
 import os
+
 from qgis.PyQt import QtCore, QtWidgets, uic
-from .utility_functions import getQGISDbs
+
+from esstoolkit.utilities import db_helpers as dbh
 from .DbSettings_dialog import DbSettingsDialog
 
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
@@ -50,7 +45,7 @@ class CreatenewDialog(QtWidgets.QDialog, FORM_CLASS):
         self.pushButtonSelectLocation.clicked.connect(self.selectSaveLocation)
         self.pushButtonNewFileDLG.clicked.connect(self.createLayer)
 
-        available_dbs = getQGISDbs()
+        available_dbs = dbh.getQGISDbs()
         self.dbsettings_dlg = DbSettingsDialog(available_dbs)
         self.dbsettings_dlg.nameLineEdit.setText('frontages')
 
@@ -65,7 +60,7 @@ class CreatenewDialog(QtWidgets.QDialog, FORM_CLASS):
         self.f_memory_radioButton.clicked.connect(self.setOutput)
         self.pushButtonSelectLocation.setDisabled(True)
 
-        #self.dbsettings_dlg.setDbOutput.connect(self.setOutput)
+        # self.dbsettings_dlg.setDbOutput.connect(self.setOutput)
         self.dbsettings_dlg.dbCombo.currentIndexChanged.connect(self.setDbPath)
         self.dbsettings_dlg.schemaCombo.currentIndexChanged.connect(self.setDbPath)
         self.dbsettings_dlg.nameLineEdit.textChanged.connect(self.setDbPath)
@@ -79,7 +74,7 @@ class CreatenewDialog(QtWidgets.QDialog, FORM_CLASS):
     def selectSaveLocation(self):
         if self.f_shp_radioButton.isChecked():
             self.lineEditFrontages.clear()
-            filename = QtWidgets.QFileDialog.getSaveFileName(None, "Specify Output Location ", "", '*.shp')
+            filename, _ = QtWidgets.QFileDialog.getSaveFileName(None, "Specify Output Location ", "", '*.shp')
             self.lineEditFrontages.setText(filename)
         elif self.f_postgis_radioButton.isChecked():
             self.lineEditFrontages.clear()
@@ -105,7 +100,7 @@ class CreatenewDialog(QtWidgets.QDialog, FORM_CLASS):
             try:
                 self.dbsettings = self.dbsettings_dlg.getDbSettings()
                 db_layer_name = "%s:%s:%s" % (
-                self.dbsettings['dbname'], self.dbsettings['schema'], self.dbsettings['table_name'])
+                    self.dbsettings['dbname'], self.dbsettings['schema'], self.dbsettings['table_name'])
                 self.lineEditFrontages.setText(db_layer_name)
             except:
                 self.lineEditFrontages.setText(self.lineEditFrontages.placeholderText())
@@ -135,4 +130,3 @@ class CreatenewDialog(QtWidgets.QDialog, FORM_CLASS):
             self.lineEditFrontages.setDisabled(False)
             self.lineEditFrontages.setPlaceholderText('Specify temporary layer name')
             self.pushButtonSelectLocation.setDisabled(True)
-

@@ -1,31 +1,29 @@
 # -*- coding: utf-8 -*-
-"""
-/***************************************************************************
- NetworkSegmenterDialog
-                                 A QGIS plugin
- This plugin segments a road centre line map.
-                             -------------------
-        begin                : 2016-11-10
-        git sha              : $Format:%H$
-        copyright            : (C) 2016 by Space SyntaxLtd
-        email                : i.kolovou@spacesyntax.com
- ***************************************************************************/
 
-/***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- ***************************************************************************/
+# Space Syntax Toolkit
+# Set of tools for essential space syntax network analysis and results exploration
+# -------------------
+# begin                : 2016-11-10
+# copyright            : (C) 2016 by Space Syntax Ltd
+# author               : Ioanna Kolovou
+# email                : i.kolovou@spacesyntax.com
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+
 """
+This module helps segment a road centre line map.
+"""
+
 from __future__ import absolute_import
-from qgis.PyQt import QtGui, uic
-from qgis.PyQt.QtCore import pyqtSignal, Qt
-from qgis.PyQt.QtWidgets import QDialog
 
 import os.path
+
+from qgis.PyQt import QtGui, uic, QtWidgets
+from qgis.PyQt.QtCore import pyqtSignal
+from qgis.PyQt.QtWidgets import QDialog
 
 from .DbSettings_dialog import DbSettingsDialog
 
@@ -34,7 +32,6 @@ FORM_CLASS, _ = uic.loadUiType(os.path.join(
 
 
 class NetworkSegmenterDialog(QDialog, FORM_CLASS):
-
     closingPlugin = pyqtSignal()
 
     def __init__(self, available_dbs, parent=None):
@@ -47,7 +44,7 @@ class NetworkSegmenterDialog(QDialog, FORM_CLASS):
         # #widgets-and-dialogs-with-auto-connect
         self.setupUi(self)
 
-        #self.outputCleaned.setText("segmented")
+        # self.outputCleaned.setText("segmented")
 
         # Setup the progress bar
         self.segmentingProgress.setMinimum(0)
@@ -95,9 +92,9 @@ class NetworkSegmenterDialog(QDialog, FORM_CLASS):
         self.shpRadioButton.clicked.connect(self.setShpOutput)
         self.outputCleaned.setDisabled(True)
 
-        #if self.memoryRadioButton.isChecked():
+        # if self.memoryRadioButton.isChecked():
         #    self.outputCleaned.setText(self.getNetwork() + "_seg")
-        #if self.postgisRadioButton.isChecked():
+        # if self.postgisRadioButton.isChecked():
         #    self.dbsettings_dlg.nameLineEdit.setText(self.getNetwork() + "_seg")
 
     def closeEvent(self, event):
@@ -159,7 +156,7 @@ class NetworkSegmenterDialog(QDialog, FORM_CLASS):
 
     def getStubRatio(self):
         if self.stubsCheckBox.isChecked():
-            return self.stubsSpin.value()/(float(100))
+            return self.stubsSpin.value() / (float(100))
         else:
             return None
 
@@ -168,7 +165,7 @@ class NetworkSegmenterDialog(QDialog, FORM_CLASS):
         if buf_value != 0:
             return self.bufferSpinBox.value()
         else:
-            return 0 #TODO or none?
+            return 0  # TODO or none?
 
     def disable_browse(self):
         if self.memoryRadioButton.isChecked():
@@ -194,7 +191,8 @@ class NetworkSegmenterDialog(QDialog, FORM_CLASS):
             self.stubsSpin.setDisabled(True)
 
     def get_settings(self):
-        settings = {'input': self.getNetwork(), 'unlinks': self.getUnlinks(), 'output': self.getOutput(), 'stub_ratio': self.getStubRatio(),
+        settings = {'input': self.getNetwork(), 'unlinks': self.getUnlinks(), 'output': self.getOutput(),
+                    'stub_ratio': self.getStubRatio(),
                     'errors': self.get_breakages(), 'buffer': self.getBuffer(), 'output_type': self.get_output_type()}
         return settings
 
@@ -204,7 +202,8 @@ class NetworkSegmenterDialog(QDialog, FORM_CLASS):
 
     def setOutput(self):
         if self.shpRadioButton.isChecked():
-            self.file_name = QtGui.QFileDialog.getSaveFileName(self, "Save output file ", self.getNetwork() + "_seg", '*.shp')
+            self.file_name, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save output file ", self.getNetwork() + "_seg",
+                                                                      '*.shp')
             if self.file_name:
                 self.outputCleaned.setText(self.file_name)
             else:
@@ -228,7 +227,7 @@ class NetworkSegmenterDialog(QDialog, FORM_CLASS):
             try:
                 self.dbsettings = self.dbsettings_dlg.getDbSettings()
                 db_layer_name = "%s:%s:%s" % (
-                self.dbsettings['dbname'], self.dbsettings['schema'], self.dbsettings['table_name'])
+                    self.dbsettings['dbname'], self.dbsettings['schema'], self.dbsettings['table_name'])
                 self.outputCleaned.setText(db_layer_name)
             except:
                 self.outputCleaned.clear()
@@ -243,6 +242,6 @@ class NetworkSegmenterDialog(QDialog, FORM_CLASS):
         self.disable_browse()
         try:
             self.outputCleaned.setText(self.file_name)
-        except :
+        except:
             self.outputCleaned.clear()
         self.outputCleaned.setDisabled(True)

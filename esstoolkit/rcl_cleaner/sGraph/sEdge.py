@@ -1,6 +1,6 @@
 # general imports
-from qgis.core import QgsFeature, QgsGeometry, QgsField
-from qgis.PyQt.QtCore import QObject, QVariant
+from qgis.PyQt.QtCore import QObject
+
 
 class sEdge(QObject):
     def __init__(self, id, feature, nodes):
@@ -10,9 +10,9 @@ class sEdge(QObject):
         self.nodes = nodes
 
         # TODO: only for catchment
-        #self.visited = {}
-        #self.agg_cost = {}
-        #self.len = self.feature.geometry().length()
+        # self.visited = {}
+        # self.agg_cost = {}
+        # self.len = self.feature.geometry().length()
 
     def get_startnode(self):
         return self.nodes[0]
@@ -22,10 +22,14 @@ class sEdge(QObject):
 
     def replace_start(self, id, point):
         self.nodes[0] = id
-        self.feature.geometry().moveVertex(point.x(), point.y(), 0)
+        geometry = self.feature.geometry()
+        geometry.moveVertex(point.x(), point.y(), 0)
+        self.feature.setGeometry(geometry)
         return
 
     def replace_end(self, id, point):
         self.nodes[1] = id
-        self.feature.geometry().moveVertex(point.x(), point.y(), len(self.feature.geometry().asPolyline()) - 1)
+        geometry = self.feature.geometry()
+        geometry.moveVertex(point.x(), point.y(), len(self.feature.geometry().asPolyline()) - 1)
+        self.feature.setGeometry(geometry)
         return
