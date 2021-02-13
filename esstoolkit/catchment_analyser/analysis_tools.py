@@ -341,6 +341,13 @@ class ConcaveHull(object):
         return vertex_list
 
     def concave_hull(self, points_list, k):
+        hull, kk = self.concave_hull_serial(points_list, k)
+        while kk != k:
+            k = kk
+            hull, kk = self.concave_hull_serial(points_list, k)
+        return hull
+
+    def concave_hull_serial(self, points_list, k):
         """
         Calculates a valid concave hull polygon containing all given points. The algorithm searches for that
         point in the neighborhood of k nearest neighbors which maximizes the rotation angle in clockwise direction
@@ -354,7 +361,7 @@ class ConcaveHull(object):
         """
         # return an empty list if not enough points are given
         if k > len(points_list):
-            return None
+            return None, k
 
         # the number of nearest neighbors k must be greater than or equal to 3
         # kk = max(k, 3)
@@ -365,12 +372,12 @@ class ConcaveHull(object):
 
         # if point_set has less then 3 points no polygon can be created and an empty list will be returned
         if len(point_set) < 3:
-            return None
+            return None, k
 
         # if point_set has 3 points then these are already vertices of the hull. Append the first point to
         # close the hull polygon
         if len(point_set) == 3:
-            return self.add_point(point_set, point_set[0])
+            return self.add_point(point_set, point_set[0]), k
 
         # make sure that k neighbours can be found
         kk = min(kk, len(point_set))
@@ -428,7 +435,7 @@ class ConcaveHull(object):
                 # this tries to remove the potentially problematic recursion. might give less optimal results
                 # point_set = self.remove_point(point_set, current_point)
                 # continue
-                return self.concave_hull(points_list, kk + 1)
+                return None, kk + 1
 
             # the first point which complies with the requirements is added to the hull and gets the current point
             current_point = c_points[i]
@@ -454,7 +461,7 @@ class ConcaveHull(object):
 
         # since at least one point is out of the computed polygon, try again with a higher number of neighbors
         if all_inside is False:
-            return self.concave_hull(points_list, kk + 1)
+            return None, kk + 1
 
         # a valid hull has been constructed
-        return hull
+        return hull, k
